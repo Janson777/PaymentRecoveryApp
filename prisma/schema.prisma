@@ -1,0 +1,232 @@
+// ============================================================================
+// Prisma Schema — Shopify Declined-Payment Recovery App
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ── Enums ───────────────────────────────────────────────────────────────────
+
+enum ProcessingStatus {
+  QUEUED
+  PROCESSED
+  SKIPPED_DUPLICATE
+  FAILED
+}
+
+enum CheckoutStatus {
+  ACTIVE
+  ABANDONED
+  RECOVERED
+  EXPIRED
+  UNKNOWN
+}
+
+enum SignalType {
+  TRANSACTION_FAILURE
+  TRANSACTION_ERROR
+  TRANSACTION_SUCCESS
+  ORDER_CREATED
+  ORDER_PAID
+  ORDER_CANCELLED
+  LIKELY_LATE_STAGE_ABANDONMENT
+}
+
+enum CaseType {
+  CONFIRMED_DECLINE
+  LIKELY_PAYMENT_STAGE_ABANDONMENT
+}
+
+enum CaseStatus {
+  CANDIDATE
+  SUPPRESSED
+  READY
+  MESSAGING
+  RECOVERED
+  EXPIRED
+  CANCELLED
+}
+
+enum Channel {
+  EMAIL
+  SMS
+}
+
+// ── Models ──────────────────────────────────────────────────────────────────
+
+model Shop {
+  id                    Int       @id @default(autoincrement())
+  shopDomain            String    @unique
+  accessTokenEncrypted  String
+  apiVersion            String
+  isActive              Boolean   @default(true)
+  installedAt           DateTime
+  uninstalledAt         DateTime?
+  defaultTimezone       String    @default("UTC")
+  settingsJson          Json?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  webhookEvents  WebhookEvent[]
+  checkouts      Checkout[]
+  paymentSignals PaymentSignal[]
+  recoveryCases  RecoveryCase[]
+  ordersIndex    OrdersIndex[]
+  smsOptOuts     SmsOptOut[]
+}
+
+model WebhookEvent {
+  id               Int              @id @default(autoincrement())
+  shopId           Int
+  topic            String
+  eventId          String
+  webhookId        String
+  triggeredAt      DateTime
+  apiVersion       String
+  hmacValid        Boolean
+  payloadJson      Json
+  receivedAt       DateTime         @default(now())
+  processedAt      DateTime?
+  processingStatus ProcessingStatus @default(QUEUED)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id])
+
+  @@unique([shopId, eventId, topic])
+}
+
+model Checkout {
+  id                  Int            @id @default(autoincrement())
+  shopId              Int
+  shopifyCheckoutId   String?
+  checkoutToken       String?
+  email               String?
+  phone               String?
+  customerId          String?
+  currency            String?
+  subtotalAmount      Decimal?
+  totalAmount         Decimal?
+  lineItemsHash       String?
+  startedAt           DateTime
+  lastSeenAt          DateTime
+  completedAt         DateTime?
+  abandonedAt         DateTime?
+  recoveryUrl         String?
+  recoveredAt         DateTime?
+  checkoutStatus      CheckoutStatus @default(ACTIVE)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  shop           Shop            @relation(fields: [shopId], references: [id])
+  paymentSignals PaymentSignal[]
+  recoveryCases  RecoveryCase[]
+
+  @@index([shopId, checkoutStatus])
+}
+
+model PaymentSignal {
+  id                     Int        @id @default(autoincrement())
+  shopId                 Int
+  checkoutId             Int?
+  shopifyOrderGid        String?
+  shopifyTransactionGid  String?
+  signalType             SignalType
+  gateway                String?
+  transactionKind        String?
+  transactionStatus      String?
+  errorCode              String?
+  paymentMethodSummary   String?
+  amount                 Decimal?
+  currency               String?
+  occurredAt             DateTime
+  rawSourceTopic         String?
+  rawSourceEventId       String?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  shop     Shop      @relation(fields: [shopId], references: [id])
+  checkout Checkout? @relation(fields: [checkoutId], references: [id])
+}
+
+model RecoveryCase {
+  id                Int        @id @default(autoincrement())
+  shopId            Int
+  checkoutId        Int?
+  shopifyOrderGid   String?
+  caseType          CaseType
+  caseStatus        CaseStatus @default(CANDIDATE)
+  confidenceScore   Int        @default(0)
+  openedAt          DateTime
+  suppressionUntil  DateTime?
+  readyAt           DateTime?
+  closedAt          DateTime?
+  closeReason       String?
+  primaryReasonCode String?
+  notesJson         Json?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  shop             Shop              @relation(fields: [shopId], references: [id])
+  checkout         Checkout?         @relation(fields: [checkoutId], references: [id])
+  recoveryMessages RecoveryMessage[]
+
+  @@index([shopId, caseStatus])
+}
+
+model RecoveryMessage {
+  id                             Int       @id @default(autoincrement())
+  recoveryCaseId                 Int
+  channel                        Channel   @default(EMAIL)
+  sequenceStep                   Int
+  templateVersion                String    @default("1")
+  scheduledFor                   DateTime
+  sentAt                         DateTime?
+  deliveryStatus                 String    @default("pending")
+  openedAt                       DateTime?
+  clickedAt                      DateTime?
+  checkoutCompletedAfterClickAt  DateTime?
+  providerMessageId              String?
+  createdAt                      DateTime  @default(now())
+  updatedAt                      DateTime  @updatedAt
+
+  recoveryCase RecoveryCase @relation(fields: [recoveryCaseId], references: [id])
+
+  @@index([providerMessageId])
+}
+
+model SmsOptOut {
+  id          Int       @id @default(autoincrement())
+  phone       String    @unique
+  shopId      Int?
+  optedOutAt  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  shop Shop? @relation(fields: [shopId], references: [id])
+}
+
+model OrdersIndex {
+  id                                Int       @id @default(autoincrement())
+  shopId                            Int
+  shopifyOrderGid                   String    @unique
+  orderName                         String?
+  email                             String?
+  customerId                        String?
+  financialStatus                   String?
+  gatewayNamesJson                  Json?
+  createdAt                         DateTime  @default(now())
+  paidAt                            DateTime?
+  cancelledAt                       DateTime?
+  checkoutRecoveryAttributedCaseId  Int?
+  updatedAt                         DateTime  @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id])
+}
