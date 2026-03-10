@@ -61,5 +61,10 @@
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
+  },
+  "overrides": {
+    "tar": "^7.5.10",
+    "estree-util-value-to-estree": "^3.3.3",
+    "esbuild": "^0.25.0"
   }
 }
