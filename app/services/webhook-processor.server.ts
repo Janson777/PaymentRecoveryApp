@@ -4,7 +4,6 @@ import { upsertCheckout } from "~/models/checkout.server";
 import { createPaymentSignal } from "~/models/payment-signal.server";
 import { upsertOrder, markOrderPaid, markOrderCancelled } from "~/models/order.server";
 import { prisma } from "~/lib/db.server";
-import { findShopById } from "~/models/shop.server";
 import type { WebhookJobData } from "~/queues/webhook.server";
 
 export async function processWebhookEvent(

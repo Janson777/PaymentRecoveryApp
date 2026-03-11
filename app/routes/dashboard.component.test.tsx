@@ -19,8 +19,8 @@ vi.mock("@remix-run/react", async () => {
   return {
     useLoaderData: mocks.useLoaderData,
     Outlet: () => React.createElement("div", { "data-testid": "outlet" }, "Outlet Content"),
-    NavLink: ({ to, children, className, end, ...props }: Record<string, unknown>) => {
-      const cls = typeof className === "function" ? (className as Function)({ isActive: false }) : className;
+    NavLink: ({ to, children, className, end: _end, ...props }: Record<string, unknown>) => {
+      const cls = typeof className === "function" ? (className as (...args: unknown[]) => unknown)({ isActive: false }) : className;
       const { ...rest } = props;
       return React.createElement("a", { ...rest, href: to, className: cls }, children as React.ReactNode);
     },

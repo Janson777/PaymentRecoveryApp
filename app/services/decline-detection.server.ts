@@ -1,4 +1,4 @@
-import { CaseType, CaseStatus, SignalType } from "@prisma/client";
+import { CaseType, SignalType } from "@prisma/client";
 import {
   createRecoveryCase,
   findOpenCaseForCheckout,

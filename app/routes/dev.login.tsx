@@ -4,7 +4,7 @@ import { Form, useLoaderData } from "@remix-run/react";
 import { prisma } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 
-export async function loader({ request }: LoaderFunctionArgs) {
+export async function loader({ request: _request }: LoaderFunctionArgs) {
   if (process.env.NODE_ENV === "production") {
     throw new Response("Not Found", { status: 404 });
   }
