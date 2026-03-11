@@ -26,7 +26,7 @@
     "@remix-run/node": "^2.15.0",
     "@remix-run/react": "^2.15.0",
     "@remix-run/serve": "^2.15.0",
-    "@sentry/remix": "^8.0.0",
+    "@sentry/remix": "^10.43.0",
     "bullmq": "^5.0.0",
     "isbot": "^5.0.0",
     "postmark": "^4.0.0",
