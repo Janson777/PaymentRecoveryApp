@@ -90,7 +90,7 @@ describe("webhooks.shopify action", () => {
       const request = buildRequest({}, { method: "GET" });
       const response = await action({ request, params: {}, context: {} });
       expect(response.status).toBe(405);
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.error).toBe("Method not allowed");
     });
 
@@ -98,7 +98,7 @@ describe("webhooks.shopify action", () => {
       const request = buildRequest({}, { omitHeaders: ["X-Shopify-Topic"] });
       const response = await action({ request, params: {}, context: {} });
       expect(response.status).toBe(400);
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.error).toBe("Missing webhook headers");
     });
 
@@ -146,7 +146,7 @@ describe("webhooks.shopify action", () => {
       const request = buildRequest({ id: 1 });
       const response = await action({ request, params: {}, context: {} });
       expect(response.status).toBe(500);
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.error).toBe("Server misconfigured");
       consoleSpy.mockRestore();
     });
@@ -156,7 +156,7 @@ describe("webhooks.shopify action", () => {
       const request = buildRequest({ id: 1 });
       const response = await action({ request, params: {}, context: {} });
       expect(response.status).toBe(401);
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.error).toBe("Invalid HMAC");
     });
 
@@ -179,7 +179,7 @@ describe("webhooks.shopify action", () => {
       const request = buildRequest({ id: 1 });
       const response = await action({ request, params: {}, context: {} });
       expect(response.status).toBe(404);
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.error).toBe("Shop not found");
     });
 
@@ -225,7 +225,7 @@ describe("webhooks.shopify action", () => {
       expect(mockDeactivateShop).toHaveBeenCalledWith(
         "test-store.myshopify.com"
       );
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.ok).toBe(true);
     });
 
@@ -272,7 +272,7 @@ describe("webhooks.shopify action", () => {
       const request = buildRequest({ id: 1 });
       const response = await action({ request, params: {}, context: {} });
 
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.ok).toBe(true);
     });
   });

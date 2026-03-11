@@ -100,6 +100,7 @@ describe("initSentry", () => {
 
   it("defaults environment to 'development' when NODE_ENV is not set", async () => {
     process.env.SENTRY_DSN = "https://abc@sentry.io/123";
+    // @ts-expect-error intentionally unsetting NODE_ENV for test
     delete process.env.NODE_ENV;
 
     const { initSentry } = await import("./sentry.server");
