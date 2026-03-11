@@ -906,7 +906,7 @@ async function main() {
     },
   });
 
-  const case5 = await prisma.recoveryCase.create({
+  const _case5 = await prisma.recoveryCase.create({
     data: {
       shopId: shop1.id,
       checkoutId: checkout3.id,
