@@ -217,12 +217,12 @@ describe("processRecoveryMessage", () => {
       expect(mockMarkMessageSent).toHaveBeenCalledWith(1, "email-msg-id-123");
     });
 
-    it("uses correct email copy for LIKELY_ABANDONMENT case type", async () => {
+    it("uses correct email copy for LIKELY_PAYMENT_STAGE_ABANDONMENT case type", async () => {
       mockFindUnique.mockResolvedValue(
         buildMessage({
           channel: Channel.EMAIL,
           sequenceStep: 2,
-          recoveryCase: { caseType: CaseType.LIKELY_ABANDONMENT },
+          recoveryCase: { caseType: CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT },
         })
       );
 
@@ -232,7 +232,7 @@ describe("processRecoveryMessage", () => {
       });
 
       expect(mockGetEmailCopy).toHaveBeenCalledWith(
-        CaseType.LIKELY_ABANDONMENT,
+        CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT,
         2
       );
     });
@@ -294,11 +294,11 @@ describe("processRecoveryMessage", () => {
       expect(mockMarkMessageSent).toHaveBeenCalledWith(1, "SM123456");
     });
 
-    it("uses correct SMS template for LIKELY_ABANDONMENT", async () => {
+    it("uses correct SMS template for LIKELY_PAYMENT_STAGE_ABANDONMENT", async () => {
       mockFindUnique.mockResolvedValue(
         buildMessage({
           channel: Channel.SMS,
-          recoveryCase: { caseType: CaseType.LIKELY_ABANDONMENT },
+          recoveryCase: { caseType: CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT },
         })
       );
       mockIsPhoneOptedOut.mockResolvedValue(false);
