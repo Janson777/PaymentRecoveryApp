@@ -96,28 +96,28 @@ describe("recovery-workflow", () => {
       });
     });
 
-    describe("LIKELY_ABANDONMENT", () => {
+    describe("LIKELY_PAYMENT_STAGE_ABANDONMENT", () => {
       it("returns step 1 copy", () => {
-        const result = getSmsCopy(CaseType.LIKELY_ABANDONMENT, 1, url);
+        const result = getSmsCopy(CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT, 1, url);
         expect(result.body).toContain("left items in your cart");
         expect(result.body.endsWith(url)).toBe(true);
       });
 
       it("returns step 2 copy", () => {
-        const result = getSmsCopy(CaseType.LIKELY_ABANDONMENT, 2, url);
+        const result = getSmsCopy(CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT, 2, url);
         expect(result.body).toContain("cart is still waiting");
         expect(result.body.endsWith(url)).toBe(true);
       });
 
       it("returns default copy for step 3+", () => {
-        const result = getSmsCopy(CaseType.LIKELY_ABANDONMENT, 3, url);
+        const result = getSmsCopy(CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT, 3, url);
         expect(result.body).toContain("Final reminder");
         expect(result.body).toContain("expires soon");
         expect(result.body.endsWith(url)).toBe(true);
       });
 
       it("returns default copy for step 5", () => {
-        const result = getSmsCopy(CaseType.LIKELY_ABANDONMENT, 5, url);
+        const result = getSmsCopy(CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT, 5, url);
         expect(result.body).toContain("Final reminder");
         expect(result.body.endsWith(url)).toBe(true);
       });
@@ -165,29 +165,29 @@ describe("recovery-workflow", () => {
       });
     });
 
-    describe("LIKELY_ABANDONMENT", () => {
+    describe("LIKELY_PAYMENT_STAGE_ABANDONMENT", () => {
       it("returns step 1 copy", () => {
-        const result = getEmailCopy(CaseType.LIKELY_ABANDONMENT, 1);
+        const result = getEmailCopy(CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT, 1);
         expect(result.subject).toContain("didn't finish checking out");
         expect(result.body).toContain("items are still available");
       });
 
       it("returns step 2 copy", () => {
-        const result = getEmailCopy(CaseType.LIKELY_ABANDONMENT, 2);
+        const result = getEmailCopy(CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT, 2);
         expect(result.subject).toContain("cart is still waiting");
         expect(result.body).toContain("trouble checking out");
         expect(result.body).toContain("PayPal or Shop Pay");
       });
 
       it("returns default copy for step 3+", () => {
-        const result = getEmailCopy(CaseType.LIKELY_ABANDONMENT, 3);
+        const result = getEmailCopy(CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT, 3);
         expect(result.subject).toContain("Last chance");
         expect(result.subject).toContain("complete your order");
         expect(result.body).toContain("won't be held much longer");
       });
 
       it("returns default copy for step 7", () => {
-        const result = getEmailCopy(CaseType.LIKELY_ABANDONMENT, 7);
+        const result = getEmailCopy(CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT, 7);
         expect(result.subject).toContain("Last chance");
         expect(result.body).toContain("Finish your purchase");
       });

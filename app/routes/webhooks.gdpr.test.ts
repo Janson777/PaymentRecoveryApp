@@ -54,7 +54,7 @@ describe("webhooks.gdpr action", () => {
       const request = buildRequest({}, { method: "GET" });
       const response = await action({ request, params: {}, context: {} });
       expect(response.status).toBe(405);
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.error).toBe("Method not allowed");
     });
 
@@ -63,7 +63,7 @@ describe("webhooks.gdpr action", () => {
       const request = buildRequest({ shop_domain: "test.myshopify.com" });
       const response = await action({ request, params: {}, context: {} });
       expect(response.status).toBe(401);
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.error).toBe("Unauthorized");
     });
 
@@ -74,7 +74,7 @@ describe("webhooks.gdpr action", () => {
       );
       const response = await action({ request, params: {}, context: {} });
       expect(response.status).toBe(401);
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.error).toBe("Unauthorized");
     });
 
@@ -83,7 +83,7 @@ describe("webhooks.gdpr action", () => {
       const request = buildRequest({ shop_domain: "test.myshopify.com" });
       const response = await action({ request, params: {}, context: {} });
       expect(response.status).toBe(401);
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.error).toBe("Invalid HMAC");
     });
 
@@ -113,7 +113,7 @@ describe("webhooks.gdpr action", () => {
         "GDPR: Customer data request for shop",
         "test.myshopify.com"
       );
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.ok).toBe(true);
       consoleSpy.mockRestore();
     });
@@ -132,7 +132,7 @@ describe("webhooks.gdpr action", () => {
         "customer",
         12345
       );
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.ok).toBe(true);
       consoleSpy.mockRestore();
     });
@@ -166,7 +166,7 @@ describe("webhooks.gdpr action", () => {
         "GDPR: Shop redact request for",
         "closing-store.myshopify.com"
       );
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.ok).toBe(true);
       consoleSpy.mockRestore();
     });
@@ -183,7 +183,7 @@ describe("webhooks.gdpr action", () => {
         "GDPR: Unknown topic",
         "unknown/topic"
       );
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data.ok).toBe(true);
       consoleSpy.mockRestore();
     });
@@ -199,7 +199,7 @@ describe("webhooks.gdpr action", () => {
       const response = await action({ request, params: {}, context: {} });
 
       expect(response.status).toBe(200);
-      const data = await response.json();
+      const data = (await response.json()) as Record<string, unknown>;
       expect(data).toEqual({ ok: true });
       vi.restoreAllMocks();
     });

@@ -77,7 +77,7 @@ describe("createRecoveryCase", () => {
 
     await createRecoveryCase({
       shopId: 10,
-      caseType: CaseType.LIKELY_ABANDONMENT,
+      caseType: CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT,
       confidenceScore: 0.6,
       suppressionMinutes: 0,
     });
