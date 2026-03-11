@@ -1,6 +1,7 @@
 # PaymentRecoveryApp
 
 [![CI](https://github.com/Janson777/PaymentRecoveryApp/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Janson777/PaymentRecoveryApp/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Janson777/PaymentRecoveryApp/graph/badge.svg)](https://codecov.io/gh/Janson777/PaymentRecoveryApp)
 
 Shopify app that recovers sales lost to declined payments. Detects failed payment events via webhooks, classifies them as confirmed declines or likely late-stage abandonments, and sends targeted recovery emails to bring customers back to checkout.
 
