@@ -13,7 +13,7 @@ export default defineConfig({
     ],
     coverage: {
       provider: "v8",
-      reporter: ["text", "html", "json-summary", "json"],
+      reporter: ["text", "html", "json-summary", "json", "lcov"],
       include: [
         "app/services/**/*.server.ts",
         "app/models/**/*.server.ts",

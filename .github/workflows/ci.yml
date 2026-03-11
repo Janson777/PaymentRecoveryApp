@@ -45,6 +45,13 @@ jobs:
         with:
           json-summary-path: ./coverage/coverage-summary.json
           json-final-path: ./coverage/coverage-final.json
+      - name: Upload to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
 
   build:
     name: Build
