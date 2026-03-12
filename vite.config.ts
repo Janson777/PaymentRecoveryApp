@@ -16,6 +16,9 @@ export default defineConfig({
     }),
     tsconfigPaths(),
   ],
+  server: {
+    allowedHosts: "all",
+  },
   css: {
     postcss: "./postcss.config.mjs",
   },

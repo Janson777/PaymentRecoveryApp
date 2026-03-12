@@ -1,0 +1,138 @@
+[
+  {
+    "title": "Case Timeline User-Interface Description",
+    "overall_structure": {
+      "description": "The interface displays two horizontal timelines: a 'Main Timeline' at the top and a 'Sub-Timeline' below it. A vertical line connects the first node on the Main Timeline to the Sub-Timeline container.",
+      "background_color": "white"
+    },
+    "main_timeline": {
+      "description": "A horizontal sequence of five circular nodes connected by a thin, solid, light grey horizontal line.",
+      "layout": {
+        "orientation": "horizontal",
+        "alignment": "center",
+        "spacing": "evenly distributed"
+      },
+      "connecting_line": {
+        "color": "#E0E0E0 (Light Grey)",
+        "thickness": "1px to 2px",
+        "position": "Centered vertically with the nodes"
+      },
+      "nodes": [
+        {
+          "position": 1,
+          "type": "circle",
+          "color": "#FFC107 (Amber/Yellow)",
+          "icon": "none",
+          "border": "Thick, semi-transparent yellow/amber border (creating a halo effect to suggest an active or selected state)",
+          "label_top": "Decline detected",
+          "label_bottom": "Mar 9",
+          "label_top_color": "black",
+          "label_bottom_color": "grey"
+        },
+        {
+          "position": 2,
+          "type": "circle",
+          "color": "#E0E0E0 (Light Grey)",
+          "icon": "none",
+          "label_top": "Email 1",
+          "label_bottom": "",
+          "label_top_color": "black",
+          "label_bottom_color": "none"
+        },
+        {
+          "position": 3,
+          "type": "circle",
+          "color": "#E0E0E0 (Light Grey)",
+          "icon": "none",
+          "label_top": "Email 2",
+          "label_bottom": "",
+          "label_top_color": "black",
+          "label_bottom_color": "none"
+        },
+        {
+          "position": 4,
+          "type": "circle",
+          "color": "#E0E0E0 (Light Grey)",
+          "icon": "none",
+          "label_top": "SMS 1",
+          "label_bottom": "",
+          "label_top_color": "black",
+          "label_bottom_color": "none"
+        },
+        {
+          "position": 5,
+          "type": "circle",
+          "color": "#D3D3D3 (Slightly darker Light Grey)",
+          "icon": "White checkmark",
+          "label_top": "Recovered",
+          "label_bottom": "",
+          "label_top_color": "black",
+          "label_bottom_color": "none"
+        }
+      ]
+    },
+    "leader_line": {
+      "description": "A vertical line originating from the bottom center of the 1st node ('Decline detected') on the Main Timeline, extending downwards to point to the top edge of the Sub-Timeline box.",
+      "color": "#FFC107 (Amber/Yellow)",
+      "thickness": "2px to 3px",
+      "style": "solid"
+    },
+    "sub_timeline": {
+      "description": "A secondary horizontal timeline contained within a rounded rectangular box, placed slightly offset to the right below the first main node.",
+      "container": {
+        "shape": "Rectangle with rounded corners",
+        "border_color": "#FFC107 (Amber/Yellow)",
+        "border_thickness": "2px",
+        "background_color": "white",
+        "padding": "Appropriate padding around internal elements"
+      },
+      "layout": {
+        "orientation": "horizontal",
+        "alignment": "center",
+        "spacing": "widely spaced to fill the container width"
+      },
+      "connecting_line": {
+        "color": "#E0E0E0 (Light Grey)",
+        "thickness": "1px to 2px",
+        "position": "Centered vertically with the nodes",
+        "label_above": "10 Min. duration",
+        "label_above_color": "black",
+        "label_above_font_size": "Smallest font size in UI",
+        "label_above_alignment": "Centered horizontally over the connecting line"
+      },
+      "nodes": [
+        {
+          "position": 1,
+          "type": "circle",
+          "color": "#FFC107 (Amber/Yellow)",
+          "icon": "White checkmark",
+          "size": "Smaller than Main Timeline nodes",
+          "label_top": "Suppression window start",
+          "label_bottom": "Mar 9, 4:26 PM",
+          "label_top_color": "black",
+          "label_bottom_color": "grey",
+          "label_font_size": "Smaller than Main Timeline labels, text wraps to two lines"
+        },
+        {
+          "position": 2,
+          "type": "circle",
+          "color": "white",
+          "border": "2px solid #E0E0E0 (Light Grey)",
+          "icon": "none",
+          "size": "Smaller than Main Timeline nodes",
+          "label_top": "Suppression window end",
+          "label_bottom": "Mar 9, 4:36 PM",
+          "label_top_color": "black",
+          "label_bottom_color": "grey",
+          "label_font_size": "Smaller than Main Timeline labels, text wraps to two lines"
+        }
+      ]
+    },
+    "typography": {
+      "font_family": "Sans-serif (e.g., Arial, Helvetica, Roboto)",
+      "primary_label_weight": "normal",
+      "secondary_label_weight": "normal",
+      "alignment": "Center-aligned below each corresponding node"
+    }
+  }
+]

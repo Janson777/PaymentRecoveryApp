@@ -20,7 +20,7 @@ async function main() {
 
   // Clean existing data and reset autoincrement sequences
   await prisma.$executeRawUnsafe(`
-    TRUNCATE TABLE "RecoveryMessage", "OrdersIndex", "RecoveryCase",
+    TRUNCATE TABLE "SmsOptOut", "RecoveryMessage", "OrdersIndex", "RecoveryCase",
       "PaymentSignal", "Checkout", "WebhookEvent", "Shop"
     RESTART IDENTITY CASCADE
   `);
@@ -38,12 +38,27 @@ async function main() {
       defaultTimezone: "America/New_York",
       settingsJson: {
         recoveryEnabled: true,
-        retryDelayMinutes: 30,
-        maxRetries: 3,
-        emailTemplateDecline:
-          "Hi {{customer_name}}, it looks like your payment didn't go through for your {{shop_name}} order. Please try again: {{recovery_url}}",
-        emailTemplateAbandonment:
-          "Hi {{customer_name}}, you left some items in your cart at {{shop_name}}. Complete your purchase: {{recovery_url}}",
+        retryDelays: [15, 720, 2160],
+        smsEnabled: true,
+        channelSequence: ["EMAIL", "EMAIL", "SMS"],
+        emailTemplates: {
+          confirmedDecline: {
+            subject: "Your payment didn't go through — your cart is still saved",
+            body: "Hi {{customer_name}}, it looks like your payment didn't go through for your {{shop_name}} order. Please try again: {{recovery_url}}",
+          },
+          likelyAbandonment: {
+            subject: "Looks like you didn't finish checking out",
+            body: "Hi {{customer_name}}, you left some items in your cart at {{shop_name}}. Complete your purchase: {{recovery_url}}",
+          },
+        },
+        smsTemplates: {
+          confirmedDecline: {
+            body: "Your payment didn't go through but your cart is saved! Complete your order: {{recovery_url}}",
+          },
+          likelyAbandonment: {
+            body: "You left items in your cart! Complete your order: {{recovery_url}}",
+          },
+        },
       },
     },
   });
@@ -58,10 +73,23 @@ async function main() {
       defaultTimezone: "America/Los_Angeles",
       settingsJson: {
         recoveryEnabled: true,
-        retryDelayMinutes: 60,
-        maxRetries: 2,
-        emailTemplateDecline: "",
-        emailTemplateAbandonment: "",
+        retryDelays: [30, 1440],
+        smsEnabled: false,
+        channelSequence: ["EMAIL", "EMAIL"],
+        emailTemplates: {
+          confirmedDecline: {
+            subject: "Your payment didn't go through — your cart is still saved",
+            body: "It looks like your payment didn't complete. Your items are still reserved — complete your order here.",
+          },
+          likelyAbandonment: {
+            subject: "Looks like you didn't finish checking out",
+            body: "Your items are still available. Complete your order here.",
+          },
+        },
+        smsTemplates: {
+          confirmedDecline: { body: "" },
+          likelyAbandonment: { body: "" },
+        },
       },
     },
   });
@@ -452,6 +480,27 @@ async function main() {
     },
   });
 
+  // Scenario E — SMS STOP received, recovered via email
+  const ckZara = await prisma.checkout.create({
+    data: {
+      shopId: shop1.id,
+      shopifyCheckoutId: "gid://shopify/Checkout/100022",
+      checkoutToken: "ck_zara_001",
+      email: "zara@example.com",
+      phone: "+15559021021",
+      customerId: "gid://shopify/Customer/500022",
+      currency: "USD",
+      subtotalAmount: 158.00,
+      totalAmount: 170.00,
+      lineItemsHash: "zr13mm33",
+      startedAt: daysAgo(4),
+      lastSeenAt: daysAgo(4),
+      completedAt: hoursAgo(30),
+      recoveryUrl: "https://cool-sneakers.myshopify.com/checkouts/ck_zara_001/recover",
+      checkoutStatus: "RECOVERED",
+    },
+  });
+
   // ── Checkouts (Shop 2) ────────────────────────────────────────────────────
   const checkout4 = await prisma.checkout.create({
     data: {
@@ -530,7 +579,7 @@ async function main() {
     },
   });
 
-  console.log("  Created 19 checkouts.");
+  console.log("  Created 20 checkouts.");
 
   // ── Payment Signals ───────────────────────────────────────────────────────
   const paymentSignals = await Promise.all([
@@ -827,6 +876,23 @@ async function main() {
         occurredAt: daysAgo(2),
       },
     }),
+    // Zara: declined (Scenario E — SMS STOP)
+    prisma.paymentSignal.create({
+      data: {
+        shopId: shop1.id,
+        checkoutId: ckZara.id,
+        shopifyTransactionGid: "gid://shopify/OrderTransaction/900022",
+        signalType: "TRANSACTION_FAILURE",
+        gateway: "shopify_payments",
+        transactionKind: "sale",
+        transactionStatus: "failure",
+        errorCode: "card_declined",
+        paymentMethodSummary: "Visa ending in 7700",
+        amount: 170.00,
+        currency: "USD",
+        occurredAt: daysAgo(4),
+      },
+    }),
     // Leo: declined at tea shop
     prisma.paymentSignal.create({
       data: {
@@ -865,6 +931,17 @@ async function main() {
 
   console.log(`  Created ${paymentSignals.length} payment signals.`);
 
+  // Planned sequences (snapshotted from shop settings at case creation)
+  const shop1PlannedSeq = [
+    { channel: "EMAIL" as const, delayMinutes: 15 },
+    { channel: "EMAIL" as const, delayMinutes: 720 },
+    { channel: "SMS" as const, delayMinutes: 2160 },
+  ];
+  const shop2PlannedSeq = [
+    { channel: "EMAIL" as const, delayMinutes: 30 },
+    { channel: "EMAIL" as const, delayMinutes: 1440 },
+  ];
+
   // ── Recovery Cases (Shop 1) ───────────────────────────────────────────────
   // Original cases
   const case1 = await prisma.recoveryCase.create({
@@ -877,6 +954,7 @@ async function main() {
       openedAt: hoursAgo(3),
       readyAt: hoursAgo(2),
       primaryReasonCode: "card_declined",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: hoursAgo(3).toISOString(), msg: "Decline detected: card_declined" },
         { ts: hoursAgo(2).toISOString(), msg: "Suppression window passed, case is READY" },
@@ -898,6 +976,7 @@ async function main() {
       closedAt: hoursAgo(6),
       closeReason: "order_paid",
       primaryReasonCode: "card_declined",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: hoursAgo(8).toISOString(), msg: "Decline detected" },
         { ts: hoursAgo(7).toISOString(), msg: "Recovery email sent" },
@@ -916,6 +995,7 @@ async function main() {
       openedAt: hoursAgo(1),
       suppressionUntil: hoursFromNow(0.5),
       primaryReasonCode: "insufficient_funds",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: hoursAgo(1).toISOString(), msg: "Decline detected: insufficient_funds — in suppression window" },
       ],
@@ -936,6 +1016,7 @@ async function main() {
       closedAt: daysAgo(4),
       closeReason: "order_paid",
       primaryReasonCode: "card_declined",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: daysAgo(5).toISOString(), msg: "Decline detected: card_declined" },
         { ts: daysAgo(5).toISOString(), msg: "Recovery email sent" },
@@ -957,6 +1038,7 @@ async function main() {
       closedAt: daysAgo(3),
       closeReason: "order_paid",
       primaryReasonCode: "insufficient_funds",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: daysAgo(4).toISOString(), msg: "Decline detected: insufficient_funds" },
         { ts: daysAgo(4).toISOString(), msg: "Recovery email sent" },
@@ -978,6 +1060,7 @@ async function main() {
       closedAt: daysAgo(1),
       closeReason: "order_paid",
       primaryReasonCode: "card_declined",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: daysAgo(2).toISOString(), msg: "Decline detected: card_declined" },
         { ts: daysAgo(2).toISOString(), msg: "Recovery email sent" },
@@ -997,6 +1080,7 @@ async function main() {
       openedAt: hoursAgo(13),
       readyAt: hoursAgo(12),
       primaryReasonCode: "do_not_honor",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: hoursAgo(13).toISOString(), msg: "Decline detected: do_not_honor" },
         { ts: hoursAgo(12).toISOString(), msg: "Recovery email sent" },
@@ -1014,6 +1098,7 @@ async function main() {
       openedAt: hoursAgo(9),
       readyAt: hoursAgo(8),
       primaryReasonCode: "card_declined",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: hoursAgo(9).toISOString(), msg: "Decline detected: card_declined" },
         { ts: hoursAgo(8).toISOString(), msg: "Recovery email sent" },
@@ -1031,6 +1116,7 @@ async function main() {
       openedAt: hoursAgo(7),
       readyAt: hoursAgo(6),
       primaryReasonCode: "insufficient_funds",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: hoursAgo(7).toISOString(), msg: "Decline detected: insufficient_funds" },
         { ts: hoursAgo(6).toISOString(), msg: "Recovery email sent" },
@@ -1051,6 +1137,7 @@ async function main() {
       closedAt: daysAgo(4),
       closeReason: "expired_no_recovery",
       primaryReasonCode: "card_declined",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: daysAgo(7).toISOString(), msg: "Decline detected: card_declined" },
         { ts: daysAgo(7).toISOString(), msg: "Recovery email sent" },
@@ -1071,6 +1158,7 @@ async function main() {
       closedAt: daysAgo(3),
       closeReason: "expired_no_recovery",
       primaryReasonCode: "expired_card",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: daysAgo(6).toISOString(), msg: "Decline detected: expired_card" },
         { ts: daysAgo(6).toISOString(), msg: "Recovery email sent" },
@@ -1091,6 +1179,7 @@ async function main() {
       closedAt: daysAgo(2),
       closeReason: "expired_no_recovery",
       primaryReasonCode: "card_declined",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: daysAgo(5).toISOString(), msg: "Decline detected: card_declined" },
         { ts: daysAgo(5).toISOString(), msg: "Recovery email sent" },
@@ -1112,6 +1201,7 @@ async function main() {
       closedAt: hoursAgo(9),
       closeReason: "success_signal_during_suppression",
       primaryReasonCode: "insufficient_funds",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: hoursAgo(11).toISOString(), msg: "Decline detected: insufficient_funds" },
         { ts: hoursAgo(9).toISOString(), msg: "Order paid during suppression — suppressed" },
@@ -1131,6 +1221,7 @@ async function main() {
       closedAt: hoursAgo(3),
       closeReason: "success_signal_during_suppression",
       primaryReasonCode: "card_declined",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: hoursAgo(5).toISOString(), msg: "Decline detected: card_declined" },
         { ts: hoursAgo(3).toISOString(), msg: "Order paid during suppression — suppressed" },
@@ -1151,9 +1242,37 @@ async function main() {
       closedAt: daysAgo(1),
       closeReason: "merchant_cancelled",
       primaryReasonCode: "do_not_honor",
+      plannedSequenceJson: shop1PlannedSeq,
       notesJson: [
         { ts: daysAgo(2).toISOString(), msg: "Decline detected: do_not_honor" },
         { ts: daysAgo(1).toISOString(), msg: "Case cancelled by merchant" },
+      ],
+    },
+  });
+
+  // Scenario E — SMS STOP received, but customer recovered via email link
+  const caseZara = await prisma.recoveryCase.create({
+    data: {
+      shopId: shop1.id,
+      checkoutId: ckZara.id,
+      shopifyOrderGid: "gid://shopify/Order/100022",
+      caseType: "CONFIRMED_DECLINE",
+      caseStatus: "RECOVERED",
+      confidenceScore: 91,
+      openedAt: daysAgo(4),
+      suppressionUntil: new Date(daysAgo(4).getTime() + 90 * 60 * 1000),
+      readyAt: daysAgo(4),
+      closedAt: hoursAgo(30),
+      closeReason: "order_paid",
+      primaryReasonCode: "card_declined",
+      plannedSequenceJson: shop1PlannedSeq,
+      notesJson: [
+        { ts: daysAgo(4).toISOString(), msg: "Decline detected: card_declined" },
+        { ts: daysAgo(4).toISOString(), msg: "Recovery email 1 sent" },
+        { ts: daysAgo(3).toISOString(), msg: "Recovery email 2 sent" },
+        { ts: daysAgo(2).toISOString(), msg: "Recovery SMS 1 sent" },
+        { ts: hoursAgo(45).toISOString(), msg: "SMS opt-out (STOP) received" },
+        { ts: hoursAgo(30).toISOString(), msg: "Order paid — case recovered!" },
       ],
     },
   });
@@ -1170,6 +1289,7 @@ async function main() {
       suppressionUntil: hoursAgo(7),
       readyAt: hoursAgo(7),
       primaryReasonCode: "card_declined",
+      plannedSequenceJson: shop2PlannedSeq,
       notesJson: [
         { ts: hoursAgo(8).toISOString(), msg: "Decline detected: card_declined" },
         { ts: hoursAgo(7).toISOString(), msg: "Suppression window passed, case is READY" },
@@ -1190,6 +1310,7 @@ async function main() {
       closedAt: daysAgo(1),
       closeReason: "expired_no_recovery",
       primaryReasonCode: "late_stage_abandonment",
+      plannedSequenceJson: shop2PlannedSeq,
       notesJson: [
         { ts: daysAgo(3).toISOString(), msg: "Likely late-stage abandonment detected" },
         { ts: daysAgo(1).toISOString(), msg: "Case expired after 48h with no recovery" },
@@ -1207,6 +1328,7 @@ async function main() {
       openedAt: hoursAgo(7),
       readyAt: hoursAgo(6),
       primaryReasonCode: "card_declined",
+      plannedSequenceJson: shop2PlannedSeq,
       notesJson: [
         { ts: hoursAgo(7).toISOString(), msg: "Decline detected: card_declined" },
         { ts: hoursAgo(6).toISOString(), msg: "Recovery email sent" },
@@ -1227,6 +1349,7 @@ async function main() {
       closedAt: daysAgo(2),
       closeReason: "order_paid",
       primaryReasonCode: "insufficient_funds",
+      plannedSequenceJson: shop2PlannedSeq,
       notesJson: [
         { ts: daysAgo(3).toISOString(), msg: "Decline detected: insufficient_funds" },
         { ts: daysAgo(3).toISOString(), msg: "Recovery email sent" },
@@ -1235,7 +1358,7 @@ async function main() {
     },
   });
 
-  console.log("  Created 19 recovery cases.");
+  console.log("  Created 20 recovery cases.");
 
   // ── Recovery Messages ─────────────────────────────────────────────────────
   const recoveryMessages = await Promise.all([
@@ -1475,9 +1598,64 @@ async function main() {
         providerMessageId: "pm_msg_031",
       },
     }),
+    // Zara (Scenario E — RECOVERED with SMS STOP): Email 1 fully completed
+    prisma.recoveryMessage.create({
+      data: {
+        recoveryCaseId: caseZara.id,
+        channel: "EMAIL",
+        sequenceStep: 1,
+        templateVersion: "1",
+        scheduledFor: daysAgo(4),
+        sentAt: daysAgo(4),
+        deliveryStatus: "delivered",
+        openedAt: daysAgo(3),
+        clickedAt: hoursAgo(30),
+        checkoutCompletedAfterClickAt: hoursAgo(30),
+        providerMessageId: "pm_msg_040",
+      },
+    }),
+    // Zara: Email 2 sent and opened, no click
+    prisma.recoveryMessage.create({
+      data: {
+        recoveryCaseId: caseZara.id,
+        channel: "EMAIL",
+        sequenceStep: 2,
+        templateVersion: "1",
+        scheduledFor: daysAgo(3),
+        sentAt: daysAgo(3),
+        deliveryStatus: "delivered",
+        openedAt: daysAgo(3),
+        providerMessageId: "pm_msg_041",
+      },
+    }),
+    // Zara: SMS 1 sent and opened, then customer replied STOP
+    prisma.recoveryMessage.create({
+      data: {
+        recoveryCaseId: caseZara.id,
+        channel: "SMS",
+        sequenceStep: 3,
+        templateVersion: "1",
+        scheduledFor: daysAgo(2),
+        sentAt: daysAgo(2),
+        deliveryStatus: "delivered",
+        openedAt: hoursAgo(46),
+        providerMessageId: "pm_msg_042",
+      },
+    }),
   ]);
 
   console.log(`  Created ${recoveryMessages.length} recovery messages.`);
+
+  // ── SMS Opt-Outs ──────────────────────────────────────────────────────────
+  await prisma.smsOptOut.create({
+    data: {
+      phone: "+15559021021",
+      shopId: shop1.id,
+      optedOutAt: hoursAgo(45),
+    },
+  });
+
+  console.log("  Created 1 SMS opt-out (Scenario E).");
 
   // ── Orders Index ──────────────────────────────────────────────────────────
   const orders = await Promise.all([
@@ -1587,6 +1765,20 @@ async function main() {
         checkoutRecoveryAttributedCaseId: caseJen.id,
       },
     }),
+    // Zara recovered order (Scenario E)
+    prisma.ordersIndex.create({
+      data: {
+        shopId: shop1.id,
+        shopifyOrderGid: "gid://shopify/Order/100022",
+        orderName: "#1022",
+        email: "zara@example.com",
+        customerId: "gid://shopify/Customer/500022",
+        financialStatus: "paid",
+        gatewayNamesJson: ["shopify_payments"],
+        paidAt: hoursAgo(30),
+        checkoutRecoveryAttributedCaseId: caseZara.id,
+      },
+    }),
   ]);
 
   console.log(`  Created ${orders.length} orders index entries.`);
@@ -1596,15 +1788,18 @@ async function main() {
   console.log("\n📊 Summary:");
   console.log("   Shops:             2");
   console.log(`   Webhook Events:    ${webhookEvents.length}`);
-  console.log("   Checkouts:         19");
+  console.log("   Checkouts:         20");
   console.log(`   Payment Signals:   ${paymentSignals.length}`);
-  console.log("   Recovery Cases:    19");
-  console.log("     Shop 1:  15  (4 RECOVERED, 4 MESSAGING, 1 CANDIDATE, 3 EXPIRED, 2 SUPPRESSED, 1 CANCELLED)");
+  console.log("   Recovery Cases:    20");
+  console.log("     Shop 1:  16  (5 RECOVERED, 4 MESSAGING, 1 CANDIDATE, 3 EXPIRED, 2 SUPPRESSED, 1 CANCELLED)");
   console.log("     Shop 2:   4  (1 RECOVERED, 1 MESSAGING, 1 READY, 1 EXPIRED)");
   console.log(`   Recovery Messages: ${recoveryMessages.length}`);
+  console.log("   SMS Opt-Outs:      1");
   console.log(`   Orders Index:      ${orders.length}`);
   console.log("\n📈 Expected Funnel (Shop 1):");
-  console.log("   Declined: 15 → Messaged: 11 → Clicked: 7 → Recovered: 4");
+  console.log("   Declined: 16 → Messaged: 12 → Clicked: 8 → Recovered: 5");
+  console.log("\n📱 Scenario E (Zara — SMS STOP):");
+  console.log("   Email 1 ✓ (clicked, completed) → Email 2 ✓ (opened) → SMS 1 ✓ (opened, STOP) → Recovered");
 }
 
 main()

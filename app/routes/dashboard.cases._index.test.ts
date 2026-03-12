@@ -12,7 +12,7 @@ vi.mock("~/models/recovery-case.server", () => ({
   getCasesByShop: (...args: unknown[]) => mockGetCasesByShop(...args),
 }));
 
-import { loader } from "~/routes/dashboard.cases";
+import { loader } from "~/routes/dashboard.cases._index";
 
 function buildRequest(status?: string): Request {
   const url = new URL("http://localhost:3000/dashboard/cases");

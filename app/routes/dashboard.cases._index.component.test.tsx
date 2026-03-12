@@ -37,7 +37,7 @@ vi.mock("@remix-run/react", async () => {
   };
 });
 
-import DashboardCases from "~/routes/dashboard.cases";
+import DashboardCases from "~/routes/dashboard.cases._index";
 
 const MOCK_CASES = [
   {

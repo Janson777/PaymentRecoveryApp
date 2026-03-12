@@ -1,0 +1,1 @@
+The timeline UI shown above in Scenario D depicts the situation where the customer is sent email 1 and responds by clicking the link and then completing the purchase.  The email 2 and SMS 1 node dots would remain grey to let the merchant know the process was successful using only email 1. 

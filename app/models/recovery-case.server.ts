@@ -9,6 +9,7 @@ export async function createRecoveryCase(params: {
   caseType: CaseType;
   confidenceScore: number;
   suppressionMinutes: number;
+  plannedSequence?: { channel: "EMAIL" | "SMS"; delayMinutes: number }[];
 }): Promise<RecoveryCase> {
   const now = new Date();
   const suppressionUntil = new Date(
@@ -24,6 +25,7 @@ export async function createRecoveryCase(params: {
       confidenceScore: params.confidenceScore,
       openedAt: now,
       suppressionUntil,
+      plannedSequenceJson: params.plannedSequence ?? undefined,
     },
   });
 }

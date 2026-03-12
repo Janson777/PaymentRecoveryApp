@@ -33,3 +33,13 @@ export async function isPhoneOptedOut(phone: string): Promise<boolean> {
   });
   return record !== null;
 }
+
+export async function getOptOutRecord(
+  phone: string
+): Promise<{ phone: string; optedOutAt: Date } | null> {
+  const normalized = normalizePhone(phone);
+  return prisma.smsOptOut.findUnique({
+    where: { phone: normalized },
+    select: { phone: true, optedOutAt: true },
+  });
+}
