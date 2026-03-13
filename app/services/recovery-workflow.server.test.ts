@@ -355,6 +355,30 @@ describe("recovery-workflow", () => {
       );
     });
 
+    it("skips NONE steps and creates fewer messages", async () => {
+      mockGetChannelForStep
+        .mockReturnValueOnce("EMAIL")
+        .mockReturnValueOnce("NONE")
+        .mockReturnValueOnce("SMS");
+
+      await promoteReadyCases();
+
+      expect(mockCreateRecoveryMessage).toHaveBeenCalledTimes(2);
+      expect(mockQueueAdd).toHaveBeenCalledTimes(2);
+
+      const steps = mockCreateRecoveryMessage.mock.calls.map(
+        (call: unknown[]) =>
+          (call[0] as { sequenceStep: number }).sequenceStep
+      );
+      expect(steps).toEqual([1, 3]);
+
+      const channels = mockCreateRecoveryMessage.mock.calls.map(
+        (call: unknown[]) =>
+          (call[0] as { channel: Channel }).channel
+      );
+      expect(channels).toEqual([Channel.EMAIL, Channel.SMS]);
+    });
+
     it("transitions case to MESSAGING after scheduling", async () => {
       await promoteReadyCases();
 

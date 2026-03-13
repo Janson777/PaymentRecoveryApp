@@ -134,7 +134,9 @@ describe("dashboard.settings", () => {
 
     it("returns { success: true } on valid submission", async () => {
       const request = buildFormRequest({
-        retryDelays: "15,720,2160",
+        retryDelay_0: "15",
+        retryDelay_1: "720",
+        retryDelay_2: "2160",
         channelStep_0: "EMAIL",
         channelStep_1: "EMAIL",
         channelStep_2: "EMAIL",
@@ -145,9 +147,11 @@ describe("dashboard.settings", () => {
       expect(data).toEqual({ success: true });
     });
 
-    it("parses retryDelays from comma-separated form field", async () => {
+    it("parses retryDelays from individual form fields", async () => {
       const request = buildFormRequest({
-        retryDelays: "30,120,1440",
+        retryDelay_0: "30",
+        retryDelay_1: "120",
+        retryDelay_2: "1440",
         channelStep_0: "EMAIL",
         channelStep_1: "EMAIL",
         channelStep_2: "EMAIL",
@@ -158,7 +162,7 @@ describe("dashboard.settings", () => {
       expect(settingsArg.retryDelays).toEqual([30, 120, 1440]);
     });
 
-    it("defaults retryDelays to 15,720,2160 when field is empty", async () => {
+    it("defaults retryDelays to 15,720,2160 when fields are missing", async () => {
       const request = buildFormRequest({
         channelStep_0: "EMAIL",
         channelStep_1: "EMAIL",
@@ -172,30 +176,50 @@ describe("dashboard.settings", () => {
 
     it("builds channelSequence from form fields", async () => {
       const request = buildFormRequest({
-        retryDelays: "15,720",
+        retryDelay_0: "15",
+        retryDelay_1: "720",
+        retryDelay_2: "2160",
         channelStep_0: "SMS",
         channelStep_1: "EMAIL",
+        channelStep_2: "EMAIL",
       });
       await action({ request, params: {}, context: {} });
 
       const settingsArg = mockUpdateShopSettings.mock.calls[0][1];
-      expect(settingsArg.channelSequence).toEqual(["SMS", "EMAIL"]);
+      expect(settingsArg.channelSequence).toEqual(["SMS", "EMAIL", "EMAIL"]);
     });
 
     it("defaults channel to EMAIL when channelStep field is missing", async () => {
       const request = buildFormRequest({
-        retryDelays: "15,720",
+        retryDelay_0: "15",
+        retryDelay_1: "720",
+        retryDelay_2: "2160",
       });
       await action({ request, params: {}, context: {} });
 
       const settingsArg = mockUpdateShopSettings.mock.calls[0][1];
-      expect(settingsArg.channelSequence).toEqual(["EMAIL", "EMAIL"]);
+      expect(settingsArg.channelSequence).toEqual(["EMAIL", "EMAIL", "EMAIL"]);
+    });
+
+    it("parses NONE channel value", async () => {
+      const request = buildFormRequest({
+        retryDelay_0: "15",
+        retryDelay_1: "720",
+        retryDelay_2: "2160",
+        channelStep_0: "EMAIL",
+        channelStep_1: "SMS",
+        channelStep_2: "NONE",
+      });
+      await action({ request, params: {}, context: {} });
+
+      const settingsArg = mockUpdateShopSettings.mock.calls[0][1];
+      expect(settingsArg.channelSequence).toEqual(["EMAIL", "SMS", "NONE"]);
     });
 
     it("sets recoveryEnabled true when checkbox is present", async () => {
       const request = buildFormRequest({
         recoveryEnabled: "true",
-        retryDelays: "15",
+        retryDelay_0: "15",
         channelStep_0: "EMAIL",
       });
       await action({ request, params: {}, context: {} });
@@ -206,7 +230,7 @@ describe("dashboard.settings", () => {
 
     it("sets recoveryEnabled false when checkbox is absent", async () => {
       const request = buildFormRequest({
-        retryDelays: "15",
+        retryDelay_0: "15",
         channelStep_0: "EMAIL",
       });
       await action({ request, params: {}, context: {} });
@@ -218,7 +242,7 @@ describe("dashboard.settings", () => {
     it("sets smsEnabled true when checkbox is present", async () => {
       const request = buildFormRequest({
         smsEnabled: "true",
-        retryDelays: "15",
+        retryDelay_0: "15",
         channelStep_0: "SMS",
       });
       await action({ request, params: {}, context: {} });
@@ -229,7 +253,7 @@ describe("dashboard.settings", () => {
 
     it("sets smsEnabled false when checkbox is absent", async () => {
       const request = buildFormRequest({
-        retryDelays: "15",
+        retryDelay_0: "15",
         channelStep_0: "EMAIL",
       });
       await action({ request, params: {}, context: {} });
@@ -240,7 +264,7 @@ describe("dashboard.settings", () => {
 
     it("uses custom email templates from form data", async () => {
       const request = buildFormRequest({
-        retryDelays: "15",
+        retryDelay_0: "15",
         channelStep_0: "EMAIL",
         confirmedDeclineSubject: "Custom decline subject",
         confirmedDeclineBody: "Custom decline body",
@@ -264,7 +288,7 @@ describe("dashboard.settings", () => {
 
     it("falls back to default email templates when fields are empty", async () => {
       const request = buildFormRequest({
-        retryDelays: "15",
+        retryDelay_0: "15",
         channelStep_0: "EMAIL",
       });
       await action({ request, params: {}, context: {} });
@@ -284,7 +308,7 @@ describe("dashboard.settings", () => {
 
     it("uses custom SMS templates from form data", async () => {
       const request = buildFormRequest({
-        retryDelays: "15",
+        retryDelay_0: "15",
         channelStep_0: "SMS",
         smsConfirmedDeclineBody: "Custom SMS decline",
         smsLikelyAbandonmentBody: "Custom SMS abandonment",
@@ -300,7 +324,7 @@ describe("dashboard.settings", () => {
 
     it("falls back to default SMS templates when fields are empty", async () => {
       const request = buildFormRequest({
-        retryDelays: "15",
+        retryDelay_0: "15",
         channelStep_0: "EMAIL",
       });
       await action({ request, params: {}, context: {} });
@@ -319,7 +343,7 @@ describe("dashboard.settings", () => {
     it("calls updateShopSettings with correct shopId", async () => {
       mockRequireShopId.mockResolvedValue(77);
       const request = buildFormRequest({
-        retryDelays: "15",
+        retryDelay_0: "15",
         channelStep_0: "EMAIL",
       });
       await action({ request, params: {}, context: {} });
@@ -333,10 +357,13 @@ describe("dashboard.settings", () => {
     it("constructs full settings object with all fields", async () => {
       const request = buildFormRequest({
         recoveryEnabled: "true",
-        retryDelays: "10,60",
+        retryDelay_0: "10",
+        retryDelay_1: "60",
+        retryDelay_2: "1440",
         smsEnabled: "true",
         channelStep_0: "SMS",
         channelStep_1: "EMAIL",
+        channelStep_2: "NONE",
         confirmedDeclineSubject: "Decline subj",
         confirmedDeclineBody: "Decline body",
         likelyAbandonmentSubject: "Abandon subj",
@@ -349,9 +376,9 @@ describe("dashboard.settings", () => {
       const settingsArg = mockUpdateShopSettings.mock.calls[0][1];
       expect(settingsArg).toEqual({
         recoveryEnabled: true,
-        retryDelays: [10, 60],
+        retryDelays: [10, 60, 1440],
         smsEnabled: true,
-        channelSequence: ["SMS", "EMAIL"],
+        channelSequence: ["SMS", "EMAIL", "NONE"],
         emailTemplates: {
           confirmedDecline: {
             subject: "Decline subj",

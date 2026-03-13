@@ -14,9 +14,9 @@ import { findShopById } from "~/models/shop.server";
 import { parseShopSettings, getChannelForStep } from "~/lib/settings";
 
 const DEFAULT_DELAYS_MS = [
-  15 * 60_000,    // Step 1: T+15 minutes
-  12 * 3_600_000, // Step 2: T+12 hours
-  36 * 3_600_000, // Step 3: T+36 hours
+  15 * 60_000,    // Attempt 1: T+15 minutes
+  12 * 3_600_000, // Attempt 2: T+12 hours
+  36 * 3_600_000, // Attempt 3: T+36 hours
 ];
 
 export async function promoteReadyCases(): Promise<number> {
@@ -46,10 +46,10 @@ async function scheduleRecoverySequence(
       : DEFAULT_DELAYS_MS;
 
   for (let step = 0; step < delays.length; step++) {
-    const channel =
-      getChannelForStep(settings, step) === "SMS"
-        ? Channel.SMS
-        : Channel.EMAIL;
+    const stepChannel = getChannelForStep(settings, step);
+    if (stepChannel === "NONE") continue;
+
+    const channel = stepChannel === "SMS" ? Channel.SMS : Channel.EMAIL;
 
     const scheduledFor = new Date(now + delays[step]);
 

@@ -2,7 +2,7 @@ export interface ShopSettings {
   recoveryEnabled: boolean;
   retryDelays: number[];
   smsEnabled: boolean;
-  channelSequence: ("EMAIL" | "SMS")[];
+  channelSequence: ("EMAIL" | "SMS" | "NONE")[];
   emailTemplates: {
     confirmedDecline: { subject: string; body: string };
     likelyAbandonment: { subject: string; body: string };
@@ -70,9 +70,11 @@ export function parseShopSettings(json: unknown): ShopSettings {
 export function getChannelForStep(
   settings: ShopSettings,
   stepIndex: number
-): "EMAIL" | "SMS" {
+): "EMAIL" | "SMS" | "NONE" {
+  const ch = settings.channelSequence[stepIndex];
+  if (ch === "NONE") return "NONE";
   if (!settings.smsEnabled) return "EMAIL";
-  return settings.channelSequence[stepIndex] ?? "EMAIL";
+  return ch === "SMS" ? "SMS" : "EMAIL";
 }
 
 export function formatDelayLabel(minutes: number): string {

@@ -121,8 +121,8 @@ describe("CaseDetail component", () => {
     };
     mocks.useLoaderData.mockReturnValue({ recoveryCase: caseWithMessages });
     render(<CaseDetail />);
-    expect(screen.getByText(/Step 1 — EMAIL/)).toBeInTheDocument();
-    expect(screen.getByText(/Step 2 — SMS/)).toBeInTheDocument();
+    expect(screen.getByText(/Attempt 1 — EMAIL/)).toBeInTheDocument();
+    expect(screen.getByText(/Attempt 2 — SMS/)).toBeInTheDocument();
     expect(screen.getByText("sent")).toBeInTheDocument();
     expect(screen.getByText("scheduled")).toBeInTheDocument();
   });

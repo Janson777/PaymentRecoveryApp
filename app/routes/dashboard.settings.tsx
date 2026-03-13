@@ -28,13 +28,16 @@ export async function action({ request }: ActionFunctionArgs) {
   const shopId = await requireShopId(request);
   const formData = await request.formData();
 
-  const retryDelays = String(formData.get("retryDelays") || "15,720,2160")
-    .split(",")
-    .map(Number);
+  const retryDelays = [0, 1, 2].map((i) => {
+    const val = formData.get(`retryDelay_${i}`);
+    return val !== null ? Number(val) : [15, 720, 2160][i];
+  });
 
-  const channelSequence: ("EMAIL" | "SMS")[] = retryDelays.map((_, i) => {
+  const channelSequence: ("EMAIL" | "SMS" | "NONE")[] = [0, 1, 2].map((i) => {
     const val = formData.get(`channelStep_${i}`);
-    return val === "SMS" ? "SMS" : "EMAIL";
+    if (val === "SMS") return "SMS";
+    if (val === "NONE") return "NONE";
+    return "EMAIL";
   });
 
   const settings: ShopSettings = {

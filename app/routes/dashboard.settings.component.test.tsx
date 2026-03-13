@@ -103,13 +103,12 @@ describe("DashboardSettings component", () => {
     expect(checkbox).toBeChecked();
   });
 
-  it("renders retry delays input with values", () => {
+  it("renders delay sliders for each step", () => {
     mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
     render(<DashboardSettings />);
-    const input = screen.getByLabelText(
-      "Retry delays (minutes, comma-separated)"
-    );
-    expect(input).toHaveValue("15,720,2160");
+    expect(screen.getByText("15 min")).toBeInTheDocument();
+    expect(screen.getByText("12 hrs")).toBeInTheDocument();
+    expect(screen.getByText("1.5 days")).toBeInTheDocument();
   });
 
   it("renders Channel Configuration section", () => {
@@ -224,9 +223,9 @@ describe("DashboardSettings component", () => {
   it("renders channel step labels with formatted delay", () => {
     mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
     render(<DashboardSettings />);
-    expect(screen.getByText("Step 1")).toBeInTheDocument();
-    expect(screen.getByText("Step 2")).toBeInTheDocument();
-    expect(screen.getByText("Step 3")).toBeInTheDocument();
+    expect(screen.getByText("Attempt 1")).toBeInTheDocument();
+    expect(screen.getByText("Attempt 2")).toBeInTheDocument();
+    expect(screen.getByText("Attempt 3")).toBeInTheDocument();
   });
 
   it("renders unchecked recovery when disabled", () => {

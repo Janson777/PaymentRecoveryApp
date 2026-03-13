@@ -200,6 +200,30 @@ describe("getChannelForStep", () => {
 
     expect(getChannelForStep(settings, 0)).toBe("SMS");
   });
+
+  it("returns NONE when channel is NONE regardless of smsEnabled", () => {
+    const settings: ShopSettings = {
+      ...DEFAULT_SETTINGS,
+      smsEnabled: false,
+      channelSequence: ["EMAIL", "NONE", "NONE"],
+    };
+
+    expect(getChannelForStep(settings, 0)).toBe("EMAIL");
+    expect(getChannelForStep(settings, 1)).toBe("NONE");
+    expect(getChannelForStep(settings, 2)).toBe("NONE");
+  });
+
+  it("returns NONE even when smsEnabled is true", () => {
+    const settings: ShopSettings = {
+      ...DEFAULT_SETTINGS,
+      smsEnabled: true,
+      channelSequence: ["SMS", "EMAIL", "NONE"],
+    };
+
+    expect(getChannelForStep(settings, 0)).toBe("SMS");
+    expect(getChannelForStep(settings, 1)).toBe("EMAIL");
+    expect(getChannelForStep(settings, 2)).toBe("NONE");
+  });
 });
 
 describe("formatDelayLabel", () => {

@@ -1,12 +1,55 @@
 import { useState } from "react";
 import { Form, useActionData, useNavigation } from "@remix-run/react";
-import { type ShopSettings, formatDelayLabel } from "~/lib/settings";
+import type { ShopSettings } from "~/lib/settings";
+
+const ATTEMPT_CONFIGS = [
+  { label: "Attempt 1", unit: "min", min: 5, max: 60, step: 5, toMinutes: (v: number) => v, fromMinutes: (m: number) => m },
+  { label: "Attempt 2", unit: "hrs", min: 1, max: 48, step: 1, toMinutes: (v: number) => v * 60, fromMinutes: (m: number) => Math.round(m / 60) },
+  { label: "Attempt 3", unit: "days", min: 0.5, max: 7, step: 0.5, toMinutes: (v: number) => v * 1440, fromMinutes: (m: number) => Math.round((m / 1440) * 2) / 2 },
+] as const;
+
+function sliderDisplayValue(stepIndex: number, nativeValue: number): string {
+  const cfg = ATTEMPT_CONFIGS[stepIndex];
+  if (cfg.unit === "min") return `${nativeValue} min`;
+  if (cfg.unit === "hrs") return nativeValue === 1 ? "1 hr" : `${nativeValue} hrs`;
+  if (nativeValue === 0.5) return "12 hrs";
+  if (nativeValue === 1) return "1 day";
+  if (nativeValue % 1 === 0.5) return `${nativeValue} days`;
+  return `${nativeValue} days`;
+}
 
 export function SettingsForm({ settings }: { settings: ShopSettings }) {
   const actionData = useActionData<{ success?: boolean }>();
   const navigation = useNavigation();
   const isSaving = navigation.state === "submitting";
   const [smsEnabled, setSmsEnabled] = useState(settings.smsEnabled);
+
+  const [channels, setChannels] = useState<("EMAIL" | "SMS" | "NONE")[]>(() =>
+    [0, 1, 2].map((i) => settings.channelSequence[i] ?? "EMAIL")
+  );
+
+  const [sliderValues, setSliderValues] = useState<number[]>(() =>
+    [0, 1, 2].map((i) => {
+      const minutes = settings.retryDelays[i] ?? [15, 720, 2160][i];
+      return ATTEMPT_CONFIGS[i].fromMinutes(minutes);
+    })
+  );
+
+  function setChannel(index: number, value: "EMAIL" | "SMS" | "NONE") {
+    setChannels((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  }
+
+  function setSlider(index: number, value: number) {
+    setSliderValues((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  }
 
   return (
     <Form method="post" className="space-y-8">
@@ -22,7 +65,7 @@ export function SettingsForm({ settings }: { settings: ShopSettings }) {
           Recovery Workflow
         </h2>
 
-        <div className="mt-6 space-y-4">
+        <div className="mt-6">
           <label className="flex items-center gap-3">
             <input
               type="checkbox"
@@ -35,25 +78,6 @@ export function SettingsForm({ settings }: { settings: ShopSettings }) {
               Enable automated recovery
             </span>
           </label>
-
-          <div>
-            <label
-              htmlFor="retryDelays"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Retry delays (minutes, comma-separated)
-            </label>
-            <input
-              id="retryDelays"
-              name="retryDelays"
-              type="text"
-              defaultValue={settings.retryDelays.join(",")}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            />
-            <p className="mt-1 text-xs text-gray-400">
-              Default: 15, 720, 2160 (15 min, 12 hrs, 36 hrs)
-            </p>
-          </div>
         </div>
       </div>
 
@@ -68,7 +92,7 @@ export function SettingsForm({ settings }: { settings: ShopSettings }) {
           </span>
         </div>
         <p className="mt-1 text-sm text-gray-500">
-          Choose how to reach customers at each recovery step.
+          Configure timing and channel for each recovery attempt.
         </p>
 
         <div className="mt-6 space-y-5">
@@ -78,7 +102,12 @@ export function SettingsForm({ settings }: { settings: ShopSettings }) {
               name="smsEnabled"
               value="true"
               checked={smsEnabled}
-              onChange={(e) => setSmsEnabled(e.target.checked)}
+              onChange={(e) => {
+                setSmsEnabled(e.target.checked);
+                if (!e.target.checked) {
+                  setChannels((prev) => prev.map((ch) => ch === "SMS" ? "EMAIL" : ch));
+                }
+              }}
               className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
             />
             <span className="text-sm font-medium text-gray-700">
@@ -89,73 +118,105 @@ export function SettingsForm({ settings }: { settings: ShopSettings }) {
             Requires Twilio credentials configured in your environment.
           </p>
 
-          <div
-            className={`overflow-hidden transition-all duration-300 ease-in-out ${
-              smsEnabled
-                ? "max-h-96 opacity-100"
-                : "max-h-0 opacity-0"
-            }`}
-          >
-            <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-              <p className="mb-3 text-sm font-medium text-gray-700">
-                Channel per recovery step
-              </p>
-              <div className="space-y-2">
-                {settings.retryDelays.map((delay, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between rounded-md bg-white px-4 py-2.5 shadow-sm"
-                  >
-                    <span className="text-sm text-gray-700">
-                      <span className="font-semibold text-gray-900">
-                        Step {i + 1}
-                      </span>{" "}
-                      <span className="text-gray-400">
-                        ({formatDelayLabel(delay)})
-                      </span>
+          {/* Attempt rows */}
+          <div className="space-y-3">
+            {ATTEMPT_CONFIGS.map((cfg, i) => {
+              const isNone = channels[i] === "NONE";
+              const minutesValue = cfg.toMinutes(sliderValues[i]);
+
+              return (
+                <div
+                  key={i}
+                  className={`rounded-lg border bg-white p-4 shadow-sm transition-colors ${
+                    isNone
+                      ? "border-gray-100 bg-gray-50"
+                      : "border-gray-200"
+                  }`}
+                >
+                  {/* Hidden inputs for form submission */}
+                  <input type="hidden" name={`retryDelay_${i}`} value={minutesValue} />
+                  <input type="hidden" name={`channelStep_${i}`} value={channels[i]} />
+
+                  <div className="flex items-center gap-4">
+                    {/* Step label */}
+                    <span className="w-24 shrink-0 text-sm font-semibold text-gray-900">
+                      {cfg.label}
                     </span>
-                    <div className="flex gap-5">
-                      <label className="flex items-center gap-1.5 text-sm">
+
+                    {/* Delay slider — hidden when NONE */}
+                    {!isNone ? (
+                      <div className="flex w-[400px] shrink-0 items-center gap-3">
+                        <input
+                          type="range"
+                          min={cfg.min}
+                          max={cfg.max}
+                          step={cfg.step}
+                          value={sliderValues[i]}
+                          onChange={(e) => setSlider(i, Number(e.target.value))}
+                          className="h-2 flex-1 cursor-pointer appearance-none rounded-full bg-gray-200 accent-indigo-600 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-indigo-600"
+                        />
+                        <span className="w-16 shrink-0 text-left text-sm font-medium tabular-nums text-indigo-600">
+                          {sliderDisplayValue(i, sliderValues[i])}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex w-[400px] shrink-0 items-center">
+                        <span className="text-sm italic text-gray-400">
+                          Disabled
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Channel radios — fixed-width columns for vertical alignment, pushed right */}
+                    <div className="ml-auto flex shrink-0 items-center border-l border-gray-200 pl-6">
+                      <label className="flex w-20 items-center gap-1.5 text-sm">
                         <input
                           type="radio"
-                          name={`channelStep_${i}`}
-                          value="EMAIL"
-                          defaultChecked={
-                            settings.channelSequence[i] !== "SMS"
-                          }
+                          checked={channels[i] === "EMAIL"}
+                          onChange={() => setChannel(i, "EMAIL")}
                           className="h-3.5 w-3.5 border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
                         <span className="text-gray-600">Email</span>
                       </label>
-                      <label className="flex items-center gap-1.5 text-sm">
-                        <input
-                          type="radio"
-                          name={`channelStep_${i}`}
-                          value="SMS"
-                          defaultChecked={
-                            settings.channelSequence[i] === "SMS"
-                          }
-                          className="h-3.5 w-3.5 border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <span className="text-gray-600">SMS</span>
-                      </label>
+
+                      {smsEnabled ? (
+                        <label className="flex w-16 items-center gap-1.5 text-sm">
+                          <input
+                            type="radio"
+                            checked={channels[i] === "SMS"}
+                            onChange={() => setChannel(i, "SMS")}
+                            className="h-3.5 w-3.5 border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span className="text-gray-600">SMS</span>
+                        </label>
+                      ) : (
+                        <span className="w-16" />
+                      )}
+
+                      {i > 0 ? (
+                        <label className="flex w-16 items-center gap-1.5 text-sm">
+                          <input
+                            type="radio"
+                            checked={channels[i] === "NONE"}
+                            onChange={() => setChannel(i, "NONE")}
+                            className="h-3.5 w-3.5 border-gray-300 text-gray-400 focus:ring-gray-400"
+                          />
+                          <span className="text-gray-400">None</span>
+                        </label>
+                      ) : (
+                        <span className="w-16" />
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
+              );
+            })}
           </div>
 
-          {/* Preserve channel config when SMS is toggled off */}
-          {!smsEnabled &&
-            settings.channelSequence.map((ch, i) => (
-              <input
-                key={i}
-                type="hidden"
-                name={`channelStep_${i}`}
-                value={ch}
-              />
-            ))}
+          <p className="text-xs text-gray-400">
+            Delay is measured from the time a decline is detected. Attempts set to
+            &ldquo;None&rdquo; are skipped.
+          </p>
         </div>
       </div>
 
