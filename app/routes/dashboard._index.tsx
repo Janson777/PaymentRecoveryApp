@@ -142,7 +142,7 @@ export default function DashboardIndex() {
         <MetricCard
           title="Messages Sent"
           value={data.messagesSent.toString()}
-          description="Total recovery emails"
+          description="Total recovery messages"
         />
       </div>
 

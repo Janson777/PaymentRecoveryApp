@@ -95,7 +95,7 @@ describe("DashboardCases component", () => {
     expect(screen.getByText("Case")).toBeInTheDocument();
     expect(screen.getByText("Type")).toBeInTheDocument();
     expect(screen.getByText("Status")).toBeInTheDocument();
-    expect(screen.getByText("Confidence")).toBeInTheDocument();
+    expect(screen.getByText("Decline Certainty")).toBeInTheDocument();
     expect(screen.getByText("Opened")).toBeInTheDocument();
     expect(screen.getByText("Actions")).toBeInTheDocument();
   });
@@ -120,7 +120,7 @@ describe("DashboardCases component", () => {
     expect(screen.getByText("john@example.com")).toBeInTheDocument();
   });
 
-  it("renders confidence scores", () => {
+  it("renders decline certainty scores", () => {
     mocks.useLoaderData.mockReturnValue({ cases: MOCK_CASES });
     render(<DashboardCases />);
     expect(screen.getByText("85%")).toBeInTheDocument();

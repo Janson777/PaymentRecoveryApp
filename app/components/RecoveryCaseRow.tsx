@@ -58,7 +58,7 @@ export function RecoveryCaseRow({ recoveryCase }: RecoveryCaseRowProps) {
       </td>
       <td className="whitespace-nowrap px-6 py-4">
         <div className="flex items-center gap-2">
-          <div className="h-2 w-16 rounded-full bg-gray-200">
+          <div className="h-2 w-24 rounded-full bg-gray-200">
             <div
               className="h-2 rounded-full bg-indigo-500"
               style={{ width: `${recoveryCase.confidenceScore}%` }}

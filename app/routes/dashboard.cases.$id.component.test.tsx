@@ -67,10 +67,10 @@ describe("CaseDetail component", () => {
     expect(screen.getByText("CONFIRMED DECLINE")).toBeInTheDocument();
   });
 
-  it("renders confidence score", () => {
+  it("renders decline certainty score", () => {
     mocks.useLoaderData.mockReturnValue({ recoveryCase: BASE_CASE });
     render(<CaseDetail />);
-    expect(screen.getByText("Confidence: 85%")).toBeInTheDocument();
+    expect(screen.getByText("85% decline certainty")).toBeInTheDocument();
   });
 
   it("renders customer email from checkout", () => {

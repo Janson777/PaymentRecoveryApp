@@ -568,7 +568,7 @@ export default function CaseDetail() {
               {recoveryCase.caseType.replace("_", " ")}
             </span>
             <span className="flex items-center gap-1.5 text-sm text-gray-500">
-              {recoveryCase.confidenceScore}% confidence
+              {recoveryCase.confidenceScore}% decline certainty
             </span>
           </div>
         </div>
