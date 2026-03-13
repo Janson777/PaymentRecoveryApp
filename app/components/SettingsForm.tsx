@@ -53,6 +53,22 @@ export function SettingsForm({ settings }: { settings: ShopSettings }) {
 
   return (
     <Form method="post" className="space-y-8">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Configure your recovery workflow
+          </p>
+        </div>
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="inline-flex items-center rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50"
+        >
+          {isSaving ? "Saving..." : "Save Settings"}
+        </button>
+      </div>
+
       {actionData?.success && (
         <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
           Settings saved successfully.
@@ -322,16 +338,6 @@ export function SettingsForm({ settings }: { settings: ShopSettings }) {
             />
           )}
         </div>
-      </div>
-
-      <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={isSaving}
-          className="inline-flex items-center rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50"
-        >
-          {isSaving ? "Saving..." : "Save Settings"}
-        </button>
       </div>
     </Form>
   );
