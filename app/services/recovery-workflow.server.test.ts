@@ -59,6 +59,7 @@ import {
   getSmsCopy,
   getEmailCopy,
 } from "./recovery-workflow.server";
+import { buildRecoveryCase, buildShop } from "~/test/fixtures";
 
 describe("recovery-workflow", () => {
   beforeEach(() => {
@@ -217,12 +218,12 @@ describe("recovery-workflow", () => {
   describe("promoteReadyCases", () => {
     it("promotes all ready cases and returns count", async () => {
       const cases = [
-        { id: 1, shopId: 10 },
-        { id: 2, shopId: 10 },
-        { id: 3, shopId: 20 },
+        buildRecoveryCase({ id: 1, shopId: 10 }),
+        buildRecoveryCase({ id: 2, shopId: 10 }),
+        buildRecoveryCase({ id: 3, shopId: 20 }),
       ];
       mockGetCasesReadyForMessaging.mockResolvedValue(cases);
-      mockFindShopById.mockResolvedValue({ id: 10, planTier: "PRO", settingsJson: {} });
+      mockFindShopById.mockResolvedValue(buildShop({ id: 10, settingsJson: {} }));
       mockCreateRecoveryMessage.mockResolvedValue({ id: 100 });
 
       const count = await promoteReadyCases();
@@ -253,9 +254,9 @@ describe("recovery-workflow", () => {
 
     it("schedules recovery sequence for each promoted case", async () => {
       mockGetCasesReadyForMessaging.mockResolvedValue([
-        { id: 1, shopId: 10 },
+        buildRecoveryCase({ id: 1, shopId: 10 }),
       ]);
-      mockFindShopById.mockResolvedValue({ id: 10, planTier: "PRO", settingsJson: {} });
+      mockFindShopById.mockResolvedValue(buildShop({ id: 10, settingsJson: {} }));
       mockCreateRecoveryMessage.mockResolvedValue({ id: 100 });
 
       await promoteReadyCases();
@@ -270,9 +271,11 @@ describe("recovery-workflow", () => {
   describe("scheduleRecoverySequence (via promoteReadyCases)", () => {
     beforeEach(() => {
       mockGetCasesReadyForMessaging.mockResolvedValue([
-        { id: 5, shopId: 10 },
+        buildRecoveryCase({ id: 5, shopId: 10 }),
       ]);
-      mockFindShopById.mockResolvedValue({ id: 10, planTier: "PRO", settingsJson: {} });
+      mockFindShopById.mockResolvedValue(buildShop({ id: 10, settingsJson: {} }));
+      // `{ id: 200 }` is the canonical bare call-counter stub pattern —
+      // tests assert on message id, not on the full RecoveryMessage shape.
       mockCreateRecoveryMessage.mockResolvedValue({ id: 200 });
     });
 

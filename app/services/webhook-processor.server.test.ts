@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ProcessingStatus, SignalType } from "@prisma/client";
+import { ProcessingStatus, SignalType, type WebhookEvent } from "@prisma/client";
 
 const mockWebhookFindUnique = vi.fn();
 const mockUpsertCheckout = vi.fn();
@@ -40,16 +40,21 @@ vi.mock("~/models/shop.server", () => ({
 }));
 
 import { processWebhookEvent } from "./webhook-processor.server";
+import { buildWebhookEvent } from "~/test/fixtures";
 
-function buildEvent(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 1,
+// Thin wrapper around the shared fixture. The fixture defaults to
+// `shopId: 1` / `eventId: "evt-123"`, but these tests were written
+// against the previous local factory's defaults (`shopId: 10` /
+// `eventId: "evt-001"`) — several assertions rely on `shopId: 10`
+// flowing through into downstream model calls. Preserve them here
+// so the migration is a pure fixture swap with no call-site churn;
+// per-test overrides still win as expected.
+function buildEvent(overrides: Partial<WebhookEvent> = {}) {
+  return buildWebhookEvent({
     shopId: 10,
-    topic: "checkouts/create",
     eventId: "evt-001",
-    payloadJson: {},
     ...overrides,
-  };
+  });
 }
 
 describe("processWebhookEvent", () => {
