@@ -80,6 +80,9 @@ This file gives Codebuff context about your project: goals, commands, convention
   - `agent-browser close` — close the browser session
 - **Important:** NEVER run `npm run dev` or other long-running dev server commands in the Codebuff terminal. These flood the terminal with continuous output and block interaction. Ask the user to start the dev server in a separate terminal, then use `agent-browser` to interact with the running app.
 
+## Key Decisions
+- **Coexist with Shopify's built-in abandoned cart email** — BitPushy layers on top of Shopify's built-in recovery email (and any third-party abandoned-cart app) rather than replacing or programmatically disabling it. Full rationale, trade-offs, and follow-ups in `DeclinedPurchase-Knowledge.md` § 3.1.
+
 ## Conventions
 - **Formatting/linting:** ESLint + Prettier (Remix defaults)
 - **Server-only files:** Use `.server.ts` suffix for files that should never be bundled to the client
@@ -89,6 +92,7 @@ This file gives Codebuff context about your project: goals, commands, convention
 - **Background work:** Use BullMQ queues — never do heavy work in request handlers
 - **Typing:** Strict TypeScript, no `any` types
 - **Imports:** Use `~/` path alias (maps to `app/`)
+- **Testing:** Vitest. For integration tests, use the shared fixture factories in `app/test/fixtures.ts` and the `applyIntegrationMockDefaults()` helper in `app/test/integration-mock-defaults.ts`. See [`app/test/README.md`](./app/test/README.md) for the full recipe + decision matrix (when to use the helper vs. local `vi.mock` factory mocks, `beforeEach` ordering rules, and common gotchas).
 - **Shopify API:** GraphQL Admin API only (REST is deprecated for new apps)
 - **Twilio SMS:** Delivery status tracked via StatusCallback webhooks; opt-out (STOP) and opt-in (START) handled via incoming message webhooks at `/webhooks/twilio`
 - **SMS:** Twilio for outbound SMS (see `app/services/sms.server.ts`). Channel routing (which steps use SMS vs email) is merchant-configurable (Phase 2).

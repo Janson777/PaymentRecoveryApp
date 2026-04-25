@@ -79,6 +79,75 @@ Category:
 
 - revenue recovery
 
+### 3.1 Decision: Coexist with Shopify's built-in abandoned cart email (Version A)
+
+**Status:** Accepted
+**Date:** 2026-03-13
+
+#### Context
+
+Shopify ships a built-in abandoned checkout email that fires automatically on every abandoned checkout where the customer entered an email address. Merchants configure it under **Settings → Notifications → Customer notifications → "Abandoned checkout"**. BitPushy overlaps with this built-in email for the subset of abandonments caused by payment decline or late-stage payment-step drop-off.
+
+Three candidate strategies were considered:
+
+- **Version A — Coexist (chosen):** Leave Shopify's built-in email enabled. BitPushy fires only on its detected subset (confirmed declines + `LIKELY_PAYMENT_STAGE_ABANDONMENT`). Some customers in the overlap window may receive both messages.
+- **Version B — Recommend merchants disable Shopify's email during onboarding.** BitPushy becomes the primary recovery channel.
+- **Version C — Programmatically disable Shopify's email via Admin API on app install.** BitPushy owns the channel entirely.
+
+#### Decision
+
+**Version A.** BitPushy ships as an additive recovery layer on top of Shopify's built-in email and any third-party abandoned-cart app the merchant already uses. We do not ask merchants to disable Shopify's email, and we do not attempt to disable it programmatically.
+
+#### Rationale
+
+1. **Coverage mismatch makes B and C actively harmful to merchants.** Shopify's built-in email fires on every abandoned checkout where the customer supplied an email address (browsers, price-shoppers, distracted customers, decline cases). BitPushy, by design, fires only on the payment-failure / late-stage-payment-step subset — an estimated minority of total abandonments (rough order-of-magnitude ~10–30%; not measured). If a merchant disables Shopify's email on our recommendation, they lose recovery revenue on the majority of abandonments BitPushy does not address. This is a quantifiable merchant-harm scenario that would surface as churn and negative reviews within 1–2 billing cycles.
+
+   Contrast with tools like Klaviyo, which *can* ethically recommend disabling Shopify's email because their abandoned-cart flow is a **coverage superset** — it fires on all abandonments. BitPushy's coverage is a **subset**, so the same recommendation inverts from helpful to harmful.
+
+2. **Version C is not really available anyway.** Shopify does not expose a GraphQL mutation to toggle the abandoned checkout customer notification. That setting is admin-UI-only. Editable notification templates via Admin API are a different surface (transactional order/shipping notifications).
+
+3. **Positioning alignment.** Our marketing content (`MARKETING-CONTENT.md`) explicitly pitches BitPushy as complementary to — not a replacement for — Shopify's built-in recovery and any existing abandoned-cart app. Versions B and C would contradict that positioning and expand the product's perceived scope beyond declined-payment recovery.
+
+4. **Permissions / scope footprint.** Version C would require additional scopes and install-time side effects, increasing onboarding friction for a feature that, per reason 1, we do not actually want to ship.
+
+#### Consequences (accepted trade-offs)
+
+- **Overlap in the `LIKELY_PAYMENT_STAGE_ABANDONMENT` bucket.** For inferred payment-stage abandonments, the same customer may receive Shopify's generic "you left something in your cart" email **and** BitPushy's payment-specific message. We accept this overlap because:
+  - BitPushy's message is more specific and higher-converting for this segment.
+  - The timing is typically different (Shopify's email fires on a configurable delay in roughly the 1h–24h range per merchant settings — verify against current Shopify docs before citing externally; BitPushy's first send is driven by our suppression window and merchant-configured attempt delays).
+  - Suppressing BitPushy until after Shopify's email would sacrifice our speed advantage, which is a core product differentiator.
+- **Onboarding UX must set expectations.** Merchants should be told during install that BitPushy layers on top of their existing recovery emails and does not replace them. This is currently implicit in marketing copy but not enforced in the onboarding flow.
+- **Support burden.** Some merchants will ask "why did my customer get two emails?" — we need a canned answer and ideally a help-doc entry.
+
+#### Follow-ups (deferred, not blocking)
+
+- Add a one-sentence "BitPushy layers on top of your existing recovery emails" note to the onboarding / first-run UI.
+- Draft a help-doc FAQ entry on the overlap scenario.
+- Reconsider this decision if product scope ever broadens beyond the declined-payment / payment-stage-abandonment subset — at that point, Version B becomes available on its merits.
+
+#### Cross-references
+
+- `MARKETING-CONTENT.md` § "Shopify already sends abandoned cart emails" (objection handling) — consumer-facing framing of this same decision.
+- Recovery case state machine in `knowledge.md` — defines the subset of abandonments BitPushy addresses.
+- § 3.2 below — customer-facing FAQ drafts derived from this decision.
+
+### 3.2 FAQ Updates (website) — Customer Messaging & Email Overlap
+
+**Status:** Draft
+New entries to add to `website/lib/faq-content.tsx` under **"Payment Recovery"**. Derived from the § 3.1 decision to coexist with Shopify's built-in abandoned cart email; these are the support questions that decision predicts merchants will ask.
+
+**"Why did my customer receive two recovery emails — one from Shopify and one from BitPushy?"**
+> This is expected behavior when a customer abandons checkout after reaching the payment step. Shopify's built-in abandoned cart email fires on every abandoned checkout, and BitPushy adds a second, payment-specific message for the subset of customers who likely hit a payment failure. The two messages are different by design: Shopify's is a generic "you left something in your cart" reminder, while BitPushy's acknowledges the payment issue and links straight back to a recoverable checkout. By design, the overlap segment — customers who tried to pay — is the exact audience BitPushy is built to convert.
+
+**"Should I turn off Shopify's abandoned cart email now that I'm using BitPushy?"**
+> No — we specifically recommend keeping it on. If you disable Shopify's email, you'll lose recovery revenue on the majority of abandonments BitPushy doesn't address: the browsers, price-shoppers, and distracted customers who never reached the payment step. BitPushy is an additive layer on top of Shopify's built-in recovery, not a replacement.
+
+**"Will BitPushy conflict with my existing abandoned-cart recovery app (Klaviyo, Omnisend, Recart, etc.)?"**
+> No. BitPushy is designed to run alongside any abandoned-cart app you already use. Your existing app handles the broad "came, browsed, left" segment it was built for, while BitPushy targets a narrower, higher-intent segment: customers who made it to the payment step and hit a decline or dropped off mid-payment. These are typically the customers your current app doesn't detect or messages generically. Keep your existing setup as-is; no configuration changes are typically required on either side.
+
+**"Can I control how often BitPushy messages a customer so they don't feel over-contacted?"**
+> Yes. Every attempt in a BitPushy sequence has a configurable delay, and you can set any step to "No message" to shorten the sequence. BitPushy also auto-suppresses any pending messages the moment a customer self-recovers — if they complete their purchase on their own or the order eventually goes through, the rest of the sequence is cancelled automatically. You can tune all of this from your BitPushy settings page.
+
 ---
 
 ## 4. Shopify Platform Compliance

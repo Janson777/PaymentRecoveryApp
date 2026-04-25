@@ -228,6 +228,8 @@ Shopify sends one generic abandoned cart email. It doesn't:
 
 BitPushy does all of this. It's not replacing Shopify's abandoned cart email — it's solving **a different, more specific, higher-intent problem**.
 
+<!-- Internal note (not rendered): The decision to coexist with (rather than replace or programmatically disable) Shopify's built-in abandoned cart email is documented in DeclinedPurchase-Knowledge.md § 3.1. Short version: BitPushy covers a subset of abandonments, so asking merchants to disable Shopify's broader email would lose them revenue on the ~70–90% of abandonments we do not address. -->
+
 ### 3. These Are Your Highest-Intent Customers
 
 A customer whose payment was declined is **fundamentally different** from someone who was just browsing. They:
