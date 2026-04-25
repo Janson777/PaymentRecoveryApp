@@ -5,6 +5,8 @@ const mockRecoveryCaseCount = vi.fn();
 const mockRecoveryMessageCount = vi.fn();
 const mockCheckoutAggregate = vi.fn();
 const mockCheckoutFindFirst = vi.fn();
+const mockFindShopById = vi.fn();
+const mockGetMonthlyUsageCount = vi.fn();
 
 vi.mock("~/lib/session.server", () => ({
   requireShopId: (...args: unknown[]) => mockRequireShopId(...args),
@@ -23,6 +25,15 @@ vi.mock("~/lib/db.server", () => ({
       findFirst: (...args: unknown[]) => mockCheckoutFindFirst(...args),
     },
   },
+}));
+
+vi.mock("~/models/shop.server", () => ({
+  findShopById: (...args: unknown[]) => mockFindShopById(...args),
+}));
+
+vi.mock("~/lib/plan.server", () => ({
+  getMonthlyUsageCount: (...args: unknown[]) => mockGetMonthlyUsageCount(...args),
+  FREE_CASES_LIMIT: 100,
 }));
 
 import { loader } from "~/routes/dashboard._index";
@@ -46,6 +57,13 @@ describe("dashboard._index", () => {
       _sum: { totalAmount: 5000 },
     });
     mockCheckoutFindFirst.mockResolvedValue({ currency: "EUR" });
+    mockFindShopById.mockResolvedValue({
+      id: 10,
+      planTier: "FREE",
+      settingsJson: {},
+      shopDomain: "test-shop.myshopify.com",
+    });
+    mockGetMonthlyUsageCount.mockResolvedValue(42);
   });
 
   describe("loader", () => {
@@ -80,6 +98,11 @@ describe("dashboard._index", () => {
       expect(data).toHaveProperty("currency");
       expect(data).toHaveProperty("casesMessaged");
       expect(data).toHaveProperty("casesClicked");
+      expect(data).toHaveProperty("planTier");
+      expect(data).toHaveProperty("monthlyUsage");
+      expect(data).toHaveProperty("maxCasesPerMonth");
+      expect(data).toHaveProperty("smsEnabled");
+      expect(data).toHaveProperty("shopDomain");
     });
 
     it("computes recovery rate from total and recovered cases", async () => {
@@ -188,6 +211,154 @@ describe("dashboard._index", () => {
       expect(data.recoveredCases).toBe(25);
       expect(data.activeCases).toBe(30);
       expect(data.messagesSent).toBe(75);
+    });
+
+    it("returns planTier as FREE for free shops", async () => {
+      mockFindShopById.mockResolvedValue({
+        id: 10,
+        planTier: "FREE",
+        settingsJson: {},
+        shopDomain: "test-shop.myshopify.com",
+      });
+
+      const response = await loader({
+        request: buildRequest(),
+        params: {},
+        context: {},
+      });
+      const data = await response.json();
+
+      expect(data.planTier).toBe("FREE");
+    });
+
+    it("returns planTier as PRO for pro shops", async () => {
+      mockFindShopById.mockResolvedValue({
+        id: 10,
+        planTier: "PRO",
+        settingsJson: {},
+        shopDomain: "test-shop.myshopify.com",
+      });
+
+      const response = await loader({
+        request: buildRequest(),
+        params: {},
+        context: {},
+      });
+      const data = await response.json();
+
+      expect(data.planTier).toBe("PRO");
+    });
+
+    it("returns smsEnabled=true when settings enable SMS", async () => {
+      mockFindShopById.mockResolvedValue({
+        id: 10,
+        planTier: "PRO",
+        settingsJson: { smsEnabled: true },
+        shopDomain: "test-shop.myshopify.com",
+      });
+
+      const response = await loader({
+        request: buildRequest(),
+        params: {},
+        context: {},
+      });
+      const data = await response.json();
+
+      expect(data.smsEnabled).toBe(true);
+    });
+
+    it("returns smsEnabled=false when settings disable SMS", async () => {
+      mockFindShopById.mockResolvedValue({
+        id: 10,
+        planTier: "PRO",
+        settingsJson: { smsEnabled: false },
+        shopDomain: "test-shop.myshopify.com",
+      });
+
+      const response = await loader({
+        request: buildRequest(),
+        params: {},
+        context: {},
+      });
+      const data = await response.json();
+
+      expect(data.smsEnabled).toBe(false);
+    });
+
+    it("defaults smsEnabled to false when settingsJson is missing", async () => {
+      mockFindShopById.mockResolvedValue({
+        id: 10,
+        planTier: "PRO",
+        settingsJson: null,
+        shopDomain: "test-shop.myshopify.com",
+      });
+
+      const response = await loader({
+        request: buildRequest(),
+        params: {},
+        context: {},
+      });
+      const data = await response.json();
+
+      expect(data.smsEnabled).toBe(false);
+    });
+
+    it("returns shopDomain from the shop record", async () => {
+      mockFindShopById.mockResolvedValue({
+        id: 10,
+        planTier: "PRO",
+        settingsJson: {},
+        shopDomain: "acme.myshopify.com",
+      });
+
+      const response = await loader({
+        request: buildRequest(),
+        params: {},
+        context: {},
+      });
+      const data = await response.json();
+
+      expect(data.shopDomain).toBe("acme.myshopify.com");
+    });
+
+    it("defaults shopDomain to empty string when shop is null", async () => {
+      mockFindShopById.mockResolvedValue(null);
+
+      const response = await loader({
+        request: buildRequest(),
+        params: {},
+        context: {},
+      });
+      const data = await response.json();
+
+      expect(data.shopDomain).toBe("");
+      expect(data.smsEnabled).toBe(false);
+    });
+
+    it("defaults planTier to FREE when shop is null", async () => {
+      mockFindShopById.mockResolvedValue(null);
+
+      const response = await loader({
+        request: buildRequest(),
+        params: {},
+        context: {},
+      });
+      const data = await response.json();
+
+      expect(data.planTier).toBe("FREE");
+    });
+
+    it("returns monthlyUsage from plan helper", async () => {
+      mockGetMonthlyUsageCount.mockResolvedValue(85);
+
+      const response = await loader({
+        request: buildRequest(),
+        params: {},
+        context: {},
+      });
+      const data = await response.json();
+
+      expect(data.monthlyUsage).toBe(85);
     });
   });
 });

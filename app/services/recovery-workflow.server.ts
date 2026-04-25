@@ -12,6 +12,7 @@ import {
 import { getRecoveryQueue } from "~/queues/recovery.server";
 import { findShopById } from "~/models/shop.server";
 import { parseShopSettings, getChannelForStep } from "~/lib/settings";
+import { getShopPlanTier, getMaxSequenceSteps, isChannelAllowed } from "~/lib/plan.server";
 
 const DEFAULT_DELAYS_MS = [
   15 * 60_000,    // Attempt 1: T+15 minutes
@@ -40,14 +41,23 @@ async function scheduleRecoverySequence(
   const queue = getRecoveryQueue();
   const now = Date.now();
 
+  const planTier = shop ? getShopPlanTier(shop) : "FREE";
+  const maxSteps = getMaxSequenceSteps(planTier);
+
   const delays =
     settings.retryDelays.length > 0
       ? settings.retryDelays.map((m) => m * 60_000)
       : DEFAULT_DELAYS_MS;
 
-  for (let step = 0; step < delays.length; step++) {
-    const stepChannel = getChannelForStep(settings, step);
+  const stepsToSchedule = Math.min(delays.length, maxSteps);
+
+  for (let step = 0; step < stepsToSchedule; step++) {
+    let stepChannel = getChannelForStep(settings, step);
     if (stepChannel === "NONE") continue;
+
+    if (!isChannelAllowed(planTier, stepChannel)) {
+      stepChannel = "EMAIL";
+    }
 
     const channel = stepChannel === "SMS" ? Channel.SMS : Channel.EMAIL;
 

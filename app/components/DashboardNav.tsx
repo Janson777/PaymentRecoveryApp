@@ -1,4 +1,5 @@
-import { NavLink } from "@remix-run/react";
+import { NavLink, Link } from "@remix-run/react";
+import { BitPushyLogo } from "~/components/BitPushyLogo";
 
 const NAV_ITEMS = [
   { label: "Overview", to: "/dashboard", end: true },
@@ -6,11 +7,17 @@ const NAV_ITEMS = [
   { label: "Settings", to: "/dashboard/settings", end: false },
 ];
 
-export function DashboardNav({ shopDomain }: { shopDomain: string }) {
+export function DashboardNav({
+  shopDomain,
+  planTier,
+}: {
+  shopDomain: string;
+  planTier: "FREE" | "PRO";
+}) {
   return (
-    <aside className="flex w-64 flex-col border-r border-gray-200 bg-white">
-      <div className="flex h-16 items-center gap-3 border-b border-gray-200 px-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600">
+    <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-gray-200 bg-white">
+      <div className="flex h-16 items-center gap-2 border-b border-gray-200 px-6">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600">
           <svg
             className="h-5 w-5 text-white"
             fill="none"
@@ -25,7 +32,7 @@ export function DashboardNav({ shopDomain }: { shopDomain: string }) {
             />
           </svg>
         </div>
-        <span className="text-sm font-semibold text-gray-900">Recovery</span>
+        <BitPushyLogo className="h-7 text-gray-900" />
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
@@ -46,6 +53,34 @@ export function DashboardNav({ shopDomain }: { shopDomain: string }) {
           </NavLink>
         ))}
       </nav>
+
+      {planTier === "FREE" && (
+        <div className="mx-3 mb-3 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-700 p-4 text-white shadow-sm">
+          <div className="mb-2 flex items-center gap-2">
+            <svg
+              className="h-4 w-4 text-indigo-200"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <span className="text-sm font-semibold">Upgrade to Pro</span>
+          </div>
+          <p className="mb-3 text-xs leading-relaxed text-indigo-100">
+            Unlimited cases, SMS recovery, and 3-step sequences.
+          </p>
+          <Link
+            to="/dashboard/settings"
+            className="block rounded-lg bg-white px-3 py-1.5 text-center text-xs font-semibold text-indigo-700 transition hover:bg-indigo-50"
+          >
+            View Plans
+          </Link>
+        </div>
+      )}
 
       <div className="border-t border-gray-200 px-4 py-4">
         <p className="truncate text-xs text-gray-400">{shopDomain}</p>

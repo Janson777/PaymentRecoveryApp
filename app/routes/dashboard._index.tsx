@@ -1,11 +1,17 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { useLoaderData, Link } from "@remix-run/react";
 import { requireShopId } from "~/lib/session.server";
 import { prisma } from "~/lib/db.server";
 import { CaseStatus } from "@prisma/client";
+import { findShopById } from "~/models/shop.server";
+import { getMonthlyUsageCount, FREE_CASES_LIMIT } from "~/lib/plan.server";
+import type { PlanTier } from "~/lib/plan.server";
+import { parseShopSettings } from "~/lib/settings";
 import { MetricCard } from "~/components/MetricCard";
 import { RecoveryFunnel } from "~/components/RecoveryFunnel";
+import { UsageLimitBanner } from "~/components/UsageLimitBanner";
+import { DashboardPhoneReminder } from "~/components/DashboardPhoneReminder";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const shopId = await requireShopId(request);
@@ -19,6 +25,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     shopCurrency,
     casesMessaged,
     casesClicked,
+    shop,
+    monthlyUsage,
   ] = await Promise.all([
     prisma.recoveryCase.count({ where: { shopId } }),
     prisma.recoveryCase.count({
@@ -74,12 +82,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
         },
       },
     }),
+    findShopById(shopId),
+    getMonthlyUsageCount(shopId),
   ]);
 
   const recoveredRevenue = Number(revenueAggregate._sum.totalAmount ?? 0);
   const currency = shopCurrency?.currency ?? "USD";
   const recoveryRate =
     totalCases > 0 ? Math.round((recoveredCases / totalCases) * 100) : 0;
+  const planTier: PlanTier = shop?.planTier === "PRO" ? "PRO" : "FREE";
+  const settings = parseShopSettings(shop?.settingsJson);
+  const smsEnabled = settings.smsEnabled;
+  const shopDomain = shop?.shopDomain ?? "";
 
   return json({
     totalCases,
@@ -91,6 +105,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     currency,
     casesMessaged,
     casesClicked,
+    planTier,
+    monthlyUsage,
+    maxCasesPerMonth: FREE_CASES_LIMIT,
+    smsEnabled,
+    shopDomain,
   });
 }
 
@@ -114,6 +133,16 @@ export default function DashboardIndex() {
           Recovery performance at a glance
         </p>
       </div>
+
+      {data.planTier === "PRO" && data.smsEnabled && (
+        <DashboardPhoneReminder shopDomain={data.shopDomain} />
+      )}
+
+      <UsageLimitBanner
+        planTier={data.planTier}
+        monthlyUsage={data.monthlyUsage}
+        maxCasesPerMonth={data.maxCasesPerMonth}
+      />
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-5 lg:grid-cols-3">
         <MetricCard
@@ -147,12 +176,35 @@ export default function DashboardIndex() {
       </div>
 
       <div className="mt-12 rounded-xl border border-gray-200 bg-white p-8">
-        <h2 className="text-lg font-semibold text-gray-900">
-          Recovery Funnel
-        </h2>
-        <p className="mt-2 text-sm text-gray-500">
-          Track how declined payments convert through your recovery pipeline
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Recovery Funnel
+            </h2>
+            <p className="mt-2 text-sm text-gray-500">
+              Track how declined payments convert through your recovery pipeline
+            </p>
+          </div>
+          {data.planTier === "FREE" && (
+            <Link
+              to="/dashboard/settings"
+              className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-600 transition hover:bg-indigo-100"
+            >
+              <svg
+                className="h-3.5 w-3.5"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              Unlock advanced analytics with Pro
+            </Link>
+          )}
+        </div>
         <RecoveryFunnel
           declinedPayments={data.totalCases}
           messagesSent={data.casesMessaged}

@@ -81,5 +81,38 @@ describe("dashboard layout", () => {
 
       expect(data.shopDomain).toBe("my-shop.myshopify.com");
     });
+
+    it("returns planTier FREE when shop has no planTier", async () => {
+      mockFindShopById.mockResolvedValue({
+        id: 10,
+        shopDomain: "test.myshopify.com",
+      });
+
+      const response = await loader({
+        request: buildRequest(),
+        params: {},
+        context: {},
+      });
+      const data = await response.json();
+
+      expect(data.planTier).toBe("FREE");
+    });
+
+    it("returns planTier PRO when shop is PRO", async () => {
+      mockFindShopById.mockResolvedValue({
+        id: 10,
+        shopDomain: "test.myshopify.com",
+        planTier: "PRO",
+      });
+
+      const response = await loader({
+        request: buildRequest(),
+        params: {},
+        context: {},
+      });
+      const data = await response.json();
+
+      expect(data.planTier).toBe("PRO");
+    });
   });
 });

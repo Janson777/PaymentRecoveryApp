@@ -3,8 +3,12 @@ import { json } from "@remix-run/node";
 import { useLoaderData, useSearchParams } from "@remix-run/react";
 import { requireShopId } from "~/lib/session.server";
 import { getCasesByShop } from "~/models/recovery-case.server";
+import { findShopById } from "~/models/shop.server";
+import { getMonthlyUsageCount, FREE_CASES_LIMIT } from "~/lib/plan.server";
+import type { PlanTier } from "~/lib/plan.server";
 import { CaseStatus } from "@prisma/client";
 import { RecoveryCaseRow } from "~/components/RecoveryCaseRow";
+import { CaseLimitNudge } from "~/components/CaseLimitNudge";
 
 const STATUS_FILTERS = [
   { label: "All", value: "" },
@@ -25,13 +29,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
       ))
     : undefined;
 
-  const cases = await getCasesByShop(shopId, statuses);
+  const [cases, shop, monthlyUsage] = await Promise.all([
+    getCasesByShop(shopId, statuses),
+    findShopById(shopId),
+    getMonthlyUsageCount(shopId),
+  ]);
 
-  return json({ cases });
+  const planTier: PlanTier = shop?.planTier === "PRO" ? "PRO" : "FREE";
+
+  return json({ cases, planTier, monthlyUsage, maxCasesPerMonth: FREE_CASES_LIMIT });
 }
 
 export default function DashboardCases() {
-  const { cases } = useLoaderData<typeof loader>();
+  const data = useLoaderData<typeof loader>();
+  const { cases } = data;
   const [searchParams, setSearchParams] = useSearchParams();
   const currentStatus = searchParams.get("status") || "";
 
@@ -43,6 +54,12 @@ export default function DashboardCases() {
           Track and manage payment recovery attempts
         </p>
       </div>
+
+      <CaseLimitNudge
+        planTier={data.planTier}
+        monthlyUsage={data.monthlyUsage}
+        maxCasesPerMonth={data.maxCasesPerMonth}
+      />
 
       <div className="mb-6 flex gap-2">
         {STATUS_FILTERS.map((filter) => (

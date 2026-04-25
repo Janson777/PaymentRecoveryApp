@@ -5,6 +5,8 @@ import {
   findOpenCaseForOrder,
 } from "~/models/recovery-case.server";
 import { prisma } from "~/lib/db.server";
+import { findShopById } from "~/models/shop.server";
+import { getShopPlanTier, canCreateCase } from "~/lib/plan.server";
 
 const DEFAULT_SUPPRESSION_MINUTES = 15;
 const ABANDONMENT_SUPPRESSION_MINUTES = 30;
@@ -33,6 +35,16 @@ export async function evaluateTransactionFailure(params: {
   });
 
   if (hasSuccessSignal) {
+    return;
+  }
+
+  const shop = await findShopById(params.shopId);
+  if (!shop) return;
+
+  const planTier = getShopPlanTier(shop);
+  const allowed = await canCreateCase(params.shopId, planTier);
+  if (!allowed) {
+    console.log(`Shop ${params.shopId} has reached monthly case limit on ${planTier} plan`);
     return;
   }
 
@@ -67,6 +79,16 @@ export async function evaluateAbandonedCheckout(params: {
   );
 
   if (existingCase) {
+    return;
+  }
+
+  const shop = await findShopById(params.shopId);
+  if (!shop) return;
+
+  const planTier = getShopPlanTier(shop);
+  const allowed = await canCreateCase(params.shopId, planTier);
+  if (!allowed) {
+    console.log(`Shop ${params.shopId} has reached monthly case limit on ${planTier} plan`);
     return;
   }
 

@@ -100,12 +100,12 @@ describe("registerWebhooks", () => {
     });
   }
 
-  it("calls fetch for all 5 webhook topics", async () => {
+  it("calls fetch for all 6 webhook registrations", async () => {
     mockFetchOk();
 
     await registerWebhooks("shop.myshopify.com", "shpat_token");
 
-    expect(mockFetch).toHaveBeenCalledTimes(5);
+    expect(mockFetch).toHaveBeenCalledTimes(6);
   });
 
   it("uses correct URL format with API version", async () => {
@@ -163,7 +163,21 @@ describe("registerWebhooks", () => {
       "checkouts/create",
       "checkouts/update",
       "app/uninstalled",
+      "app_subscriptions/update",
     ]);
+  });
+
+  it("routes billing webhook to /webhooks/billing", async () => {
+    mockFetchOk();
+
+    await registerWebhooks("shop.myshopify.com", "shpat_token");
+
+    const billingCall = mockFetch.mock.calls.find((call) => {
+      const body = JSON.parse((call[1] as RequestInit).body as string);
+      return body.webhook.topic === "app_subscriptions/update";
+    });
+    const body = JSON.parse((billingCall![1] as RequestInit).body as string);
+    expect(body.webhook.address).toBe("https://myapp.example.com/webhooks/billing");
   });
 
   it("logs registered count on success", async () => {
@@ -173,7 +187,7 @@ describe("registerWebhooks", () => {
     await registerWebhooks("shop.myshopify.com", "shpat_token");
 
     expect(logSpy).toHaveBeenCalledWith(
-      "Registered 5/5 webhooks for shop.myshopify.com"
+      "Registered 6/6 webhooks for shop.myshopify.com"
     );
     logSpy.mockRestore();
   });
@@ -184,7 +198,8 @@ describe("registerWebhooks", () => {
       .mockResolvedValueOnce({ ok: false, status: 422, text: () => Promise.resolve("Already exists") })
       .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve("") })
       .mockResolvedValueOnce({ ok: true, status: 200, text: () => Promise.resolve("") })
-      .mockResolvedValueOnce({ ok: false, status: 500, text: () => Promise.resolve("Server error") });
+      .mockResolvedValueOnce({ ok: false, status: 500, text: () => Promise.resolve("Server error") })
+      .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve("") });
 
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -196,7 +211,7 @@ describe("registerWebhooks", () => {
       expect.stringContaining("Failed to register webhook")
     );
     expect(logSpy).toHaveBeenCalledWith(
-      "Registered 3/5 webhooks for shop.myshopify.com"
+      "Registered 4/6 webhooks for shop.myshopify.com"
     );
     errorSpy.mockRestore();
     logSpy.mockRestore();
@@ -208,6 +223,7 @@ describe("registerWebhooks", () => {
       .mockRejectedValueOnce(new Error("Network error"))
       .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve("") })
       .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve("") })
+      .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve("") })
       .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve("") });
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -215,7 +231,7 @@ describe("registerWebhooks", () => {
     await registerWebhooks("shop.myshopify.com", "shpat_token");
 
     expect(logSpy).toHaveBeenCalledWith(
-      "Registered 4/5 webhooks for shop.myshopify.com"
+      "Registered 5/6 webhooks for shop.myshopify.com"
     );
     logSpy.mockRestore();
   });

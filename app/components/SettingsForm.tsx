@@ -18,14 +18,28 @@ function sliderDisplayValue(stepIndex: number, nativeValue: number): string {
   return `${nativeValue} days`;
 }
 
-export function SettingsForm({ settings }: { settings: ShopSettings }) {
+export function SettingsForm({
+  settings,
+  planTier,
+  shopDomain,
+}: {
+  settings: ShopSettings;
+  planTier: "FREE" | "PRO";
+  shopDomain: string;
+}) {
   const actionData = useActionData<{ success?: boolean }>();
   const navigation = useNavigation();
   const isSaving = navigation.state === "submitting";
-  const [smsEnabled, setSmsEnabled] = useState(settings.smsEnabled);
+  const isFree = planTier === "FREE";
+  const [smsEnabled, setSmsEnabled] = useState(() =>
+    isFree ? false : settings.smsEnabled
+  );
 
   const [channels, setChannels] = useState<("EMAIL" | "SMS" | "NONE")[]>(() =>
-    [0, 1, 2].map((i) => settings.channelSequence[i] ?? "EMAIL")
+    [0, 1, 2].map((i) => {
+      if (isFree && i === 2) return "NONE";
+      return settings.channelSequence[i] ?? "EMAIL";
+    })
   );
 
   const [sliderValues, setSliderValues] = useState<number[]>(() =>
@@ -112,33 +126,86 @@ export function SettingsForm({ settings }: { settings: ShopSettings }) {
         </p>
 
         <div className="mt-6 space-y-5">
-          <label className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              name="smsEnabled"
-              value="true"
-              checked={smsEnabled}
-              onChange={(e) => {
-                setSmsEnabled(e.target.checked);
-                if (!e.target.checked) {
-                  setChannels((prev) => prev.map((ch) => ch === "SMS" ? "EMAIL" : ch));
-                }
-              }}
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            <span className="text-sm font-medium text-gray-700">
-              Enable SMS messaging
-            </span>
-          </label>
-          <p className="-mt-3 pl-7 text-xs text-gray-400">
-            Requires Twilio credentials configured in your environment.
-          </p>
+          {isFree ? (
+            <>
+              <label className="flex items-center gap-3 opacity-50">
+                <input
+                  type="checkbox"
+                  disabled
+                  className="h-4 w-4 rounded border-gray-300 text-gray-400"
+                />
+                <span className="text-sm font-medium text-gray-500">
+                  Enable SMS messaging
+                </span>
+              </label>
+              <div className="-mt-2 flex items-center gap-2 rounded-lg border border-dashed border-indigo-200 bg-indigo-50/50 px-3 py-2.5">
+                <LockIcon />
+                <span className="text-sm text-indigo-700/80">
+                  SMS messaging is a Pro feature. Upgrade above to unlock multi-channel recovery.
+                </span>
+                <span className="ml-auto shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+                  Pro
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  name="smsEnabled"
+                  value="true"
+                  checked={smsEnabled}
+                  onChange={(e) => {
+                    setSmsEnabled(e.target.checked);
+                    if (!e.target.checked) {
+                      setChannels((prev) => prev.map((ch) => ch === "SMS" ? "EMAIL" : ch));
+                    }
+                  }}
+                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Enable SMS messaging
+                </span>
+              </label>
+              <p className="-mt-3 pl-7 text-xs text-gray-400">
+                Requires Twilio credentials configured in your environment.
+              </p>
+            </>
+          )}
 
           {/* Attempt rows */}
           <div className="space-y-3">
             {ATTEMPT_CONFIGS.map((cfg, i) => {
+              const isLockedStep = isFree && i === 2;
               const isNone = channels[i] === "NONE";
               const minutesValue = cfg.toMinutes(sliderValues[i]);
+
+              if (isLockedStep) {
+                return (
+                  <div
+                    key={i}
+                    className="rounded-lg border border-dashed border-gray-200 bg-gray-50/50 p-4"
+                  >
+                    <input type="hidden" name={`retryDelay_${i}`} value={minutesValue} />
+                    <input type="hidden" name={`channelStep_${i}`} value="NONE" />
+                    <div className="flex items-center gap-4">
+                      <span className="w-24 shrink-0 text-sm font-semibold text-gray-400">
+                        {cfg.label}
+                      </span>
+                      <div className="flex flex-1 items-center gap-2">
+                        <LockIcon />
+                        <span className="text-sm text-gray-400">
+                          Upgrade to Pro to unlock 3-step sequences
+                        </span>
+                        <span className="ml-auto shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+                          Pro
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
 
               return (
                 <div
@@ -340,6 +407,22 @@ export function SettingsForm({ settings }: { settings: ShopSettings }) {
         </div>
       </div>
     </Form>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg
+      className="h-4 w-4 shrink-0 text-indigo-400"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+    >
+      <path
+        fillRule="evenodd"
+        d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z"
+        clipRule="evenodd"
+      />
+    </svg>
   );
 }
 

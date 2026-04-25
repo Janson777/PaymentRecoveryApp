@@ -3,6 +3,7 @@ import { json, redirect } from "@remix-run/node";
 import { Outlet, useLoaderData } from "@remix-run/react";
 import { requireShopId } from "~/lib/session.server";
 import { findShopById } from "~/models/shop.server";
+import type { PlanTier } from "~/lib/plan.server";
 import { DashboardNav } from "~/components/DashboardNav";
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -16,15 +17,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return redirect("/");
   }
 
-  return json({ shopDomain: shop.shopDomain });
+  const planTier: PlanTier = shop.planTier === "PRO" ? "PRO" : "FREE";
+
+  return json({ shopDomain: shop.shopDomain, planTier });
 }
 
 export default function DashboardLayout() {
-  const { shopDomain } = useLoaderData<typeof loader>();
+  const { shopDomain, planTier } = useLoaderData<typeof loader>();
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <DashboardNav shopDomain={shopDomain} />
+      <DashboardNav shopDomain={shopDomain} planTier={planTier} />
       <main className="flex-1 p-8">
         <Outlet />
       </main>

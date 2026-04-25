@@ -3,6 +3,8 @@ import { CaseStatus } from "@prisma/client";
 
 const mockRequireShopId = vi.fn();
 const mockGetCasesByShop = vi.fn();
+const mockFindShopById = vi.fn();
+const mockGetMonthlyUsageCount = vi.fn();
 
 vi.mock("~/lib/session.server", () => ({
   requireShopId: (...args: unknown[]) => mockRequireShopId(...args),
@@ -10,6 +12,15 @@ vi.mock("~/lib/session.server", () => ({
 
 vi.mock("~/models/recovery-case.server", () => ({
   getCasesByShop: (...args: unknown[]) => mockGetCasesByShop(...args),
+}));
+
+vi.mock("~/models/shop.server", () => ({
+  findShopById: (...args: unknown[]) => mockFindShopById(...args),
+}));
+
+vi.mock("~/lib/plan.server", () => ({
+  getMonthlyUsageCount: (...args: unknown[]) => mockGetMonthlyUsageCount(...args),
+  FREE_CASES_LIMIT: 100,
 }));
 
 import { loader } from "~/routes/dashboard.cases._index";
@@ -30,6 +41,8 @@ describe("dashboard.cases", () => {
     vi.resetAllMocks();
     mockRequireShopId.mockResolvedValue(10);
     mockGetCasesByShop.mockResolvedValue(mockCases);
+    mockFindShopById.mockResolvedValue({ id: 10, planTier: "FREE" });
+    mockGetMonthlyUsageCount.mockResolvedValue(42);
   });
 
   describe("loader", () => {
@@ -108,6 +121,37 @@ describe("dashboard.cases", () => {
       await loader({ request: buildRequest(), params: {}, context: {} });
 
       expect(mockGetCasesByShop).toHaveBeenCalledWith(77, undefined);
+    });
+
+    it("returns planTier FREE when shop has no planTier", async () => {
+      mockFindShopById.mockResolvedValue(null);
+      const response = await loader({ request: buildRequest(), params: {}, context: {} });
+      const data = await response.json();
+
+      expect(data.planTier).toBe("FREE");
+    });
+
+    it("returns planTier PRO when shop is PRO", async () => {
+      mockFindShopById.mockResolvedValue({ id: 10, planTier: "PRO" });
+      const response = await loader({ request: buildRequest(), params: {}, context: {} });
+      const data = await response.json();
+
+      expect(data.planTier).toBe("PRO");
+    });
+
+    it("returns monthlyUsage from getMonthlyUsageCount", async () => {
+      mockGetMonthlyUsageCount.mockResolvedValue(85);
+      const response = await loader({ request: buildRequest(), params: {}, context: {} });
+      const data = await response.json();
+
+      expect(data.monthlyUsage).toBe(85);
+    });
+
+    it("returns maxCasesPerMonth from FREE_CASES_LIMIT", async () => {
+      const response = await loader({ request: buildRequest(), params: {}, context: {} });
+      const data = await response.json();
+
+      expect(data.maxCasesPerMonth).toBe(100);
     });
   });
 });

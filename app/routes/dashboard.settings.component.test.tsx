@@ -11,6 +11,11 @@ vi.mock("~/models/shop.server", () => ({
   updateShopSettings: vi.fn(),
 }));
 
+vi.mock("~/lib/plan.server", () => ({
+  getMonthlyUsageCount: vi.fn(),
+  FREE_CASES_LIMIT: 100,
+}));
+
 vi.mock("@prisma/client", () => ({
   Prisma: {},
 }));
@@ -67,6 +72,15 @@ const MOCK_SETTINGS = {
   },
 };
 
+const defaultLoaderData = {
+  settings: MOCK_SETTINGS,
+  planTier: "FREE" as const,
+  billingActivatedAt: null as string | null,
+  monthlyUsage: 23,
+  maxCasesPerMonth: 100,
+  shopDomain: "test-store.myshopify.com",
+};
+
 describe("DashboardSettings component", () => {
   beforeEach(() => {
     mocks.useActionData.mockReturnValue(null);
@@ -74,13 +88,13 @@ describe("DashboardSettings component", () => {
   });
 
   it("renders Settings heading", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
     expect(screen.getByText("Settings")).toBeInTheDocument();
   });
 
   it("renders description text", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
     expect(
       screen.getByText("Configure your recovery workflow")
@@ -88,13 +102,13 @@ describe("DashboardSettings component", () => {
   });
 
   it("renders Recovery Workflow section", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
     expect(screen.getByText("Recovery Workflow")).toBeInTheDocument();
   });
 
   it("renders Enable automated recovery checkbox", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
     expect(
       screen.getByText("Enable automated recovery")
@@ -103,8 +117,18 @@ describe("DashboardSettings component", () => {
     expect(checkbox).toBeChecked();
   });
 
-  it("renders delay sliders for each step", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+  it("renders delay sliders for steps 1-2 on FREE plan", () => {
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
+    render(<DashboardSettings />);
+    expect(screen.getByText("15 min")).toBeInTheDocument();
+    expect(screen.getByText("12 hrs")).toBeInTheDocument();
+  });
+
+  it("renders delay sliders for all 3 steps on PRO plan", () => {
+    mocks.useLoaderData.mockReturnValue({
+      ...defaultLoaderData,
+      planTier: "PRO" as const,
+    });
     render(<DashboardSettings />);
     expect(screen.getByText("15 min")).toBeInTheDocument();
     expect(screen.getByText("12 hrs")).toBeInTheDocument();
@@ -112,20 +136,47 @@ describe("DashboardSettings component", () => {
   });
 
   it("renders Channel Configuration section", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
     expect(screen.getByText("Channel Configuration")).toBeInTheDocument();
   });
 
-  it("renders Enable SMS messaging checkbox unchecked when smsEnabled is false", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+  it("renders SMS checkbox disabled on FREE plan", () => {
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
     const checkbox = screen.getByLabelText("Enable SMS messaging");
+    expect(checkbox).toBeDisabled();
     expect(checkbox).not.toBeChecked();
   });
 
+  it("renders SMS checkbox enabled on PRO plan", () => {
+    mocks.useLoaderData.mockReturnValue({
+      ...defaultLoaderData,
+      planTier: "PRO" as const,
+      settings: { ...MOCK_SETTINGS, smsEnabled: false },
+    });
+    render(<DashboardSettings />);
+    const checkbox = screen.getByLabelText("Enable SMS messaging");
+    expect(checkbox).not.toBeDisabled();
+  });
+
+  it("shows SMS upgrade prompt on FREE plan", () => {
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
+    render(<DashboardSettings />);
+    expect(screen.getByText(/SMS messaging is a Pro feature/)).toBeInTheDocument();
+  });
+
+  it("does not show SMS upgrade prompt on PRO plan", () => {
+    mocks.useLoaderData.mockReturnValue({
+      ...defaultLoaderData,
+      planTier: "PRO" as const,
+    });
+    render(<DashboardSettings />);
+    expect(screen.queryByText(/SMS messaging is a Pro feature/)).not.toBeInTheDocument();
+  });
+
   it("renders Confirmed Decline Templates section", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
     expect(
       screen.getByText("Confirmed Decline Templates")
@@ -133,7 +184,7 @@ describe("DashboardSettings component", () => {
   });
 
   it("renders confirmed decline email subject input", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
     const input = screen.getByLabelText("Email Subject", {
       selector: "#confirmedDeclineSubject",
@@ -142,7 +193,7 @@ describe("DashboardSettings component", () => {
   });
 
   it("renders confirmed decline email body textarea", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
     const textarea = screen.getByLabelText("Email Body", {
       selector: "#confirmedDeclineBody",
@@ -151,7 +202,7 @@ describe("DashboardSettings component", () => {
   });
 
   it("renders Likely Abandonment Templates section", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
     expect(
       screen.getByText("Likely Abandonment Templates")
@@ -159,7 +210,7 @@ describe("DashboardSettings component", () => {
   });
 
   it("renders likely abandonment email subject input", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
     const input = screen.getByLabelText("Email Subject", {
       selector: "#likelyAbandonmentSubject",
@@ -168,7 +219,7 @@ describe("DashboardSettings component", () => {
   });
 
   it("renders likely abandonment email body textarea", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
     const textarea = screen.getByLabelText("Email Body", {
       selector: "#likelyAbandonmentBody",
@@ -177,7 +228,7 @@ describe("DashboardSettings component", () => {
   });
 
   it("renders Save Settings button", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
     const button = screen.getByRole("button", { name: "Save Settings" });
     expect(button).toBeInTheDocument();
@@ -185,7 +236,7 @@ describe("DashboardSettings component", () => {
   });
 
   it("shows Saving... when submitting", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     mocks.useNavigation.mockReturnValue({ state: "submitting" });
     render(<DashboardSettings />);
     const button = screen.getByRole("button", { name: "Saving..." });
@@ -193,7 +244,7 @@ describe("DashboardSettings component", () => {
   });
 
   it("shows success banner when action returns success", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     mocks.useActionData.mockReturnValue({ success: true });
     render(<DashboardSettings />);
     expect(
@@ -202,7 +253,7 @@ describe("DashboardSettings component", () => {
   });
 
   it("does not show success banner when action has no result", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     mocks.useActionData.mockReturnValue(null);
     render(<DashboardSettings />);
     expect(
@@ -211,7 +262,7 @@ describe("DashboardSettings component", () => {
   });
 
   it("renders with default settings", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: DEFAULT_SETTINGS });
+    mocks.useLoaderData.mockReturnValue({ ...defaultLoaderData, settings: DEFAULT_SETTINGS });
     render(<DashboardSettings />);
     expect(screen.getByText("Settings")).toBeInTheDocument();
     const recoveryCheckbox = screen.getByLabelText(
@@ -221,7 +272,7 @@ describe("DashboardSettings component", () => {
   });
 
   it("renders channel step labels with formatted delay", () => {
-    mocks.useLoaderData.mockReturnValue({ settings: MOCK_SETTINGS });
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
     expect(screen.getByText("Attempt 1")).toBeInTheDocument();
     expect(screen.getByText("Attempt 2")).toBeInTheDocument();
@@ -230,10 +281,131 @@ describe("DashboardSettings component", () => {
 
   it("renders unchecked recovery when disabled", () => {
     mocks.useLoaderData.mockReturnValue({
+      ...defaultLoaderData,
       settings: { ...MOCK_SETTINGS, recoveryEnabled: false },
     });
     render(<DashboardSettings />);
     const checkbox = screen.getByLabelText("Enable automated recovery");
     expect(checkbox).not.toBeChecked();
   });
+
+  it("renders Subscription section with PlanCard", () => {
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
+    render(<DashboardSettings />);
+    expect(screen.getByText("Subscription")).toBeInTheDocument();
+  });
+
+  it("shows Starter badge for FREE plan", () => {
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
+    render(<DashboardSettings />);
+    expect(screen.getByText("Starter")).toBeInTheDocument();
+  });
+
+  it("shows monthly usage count for FREE plan", () => {
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
+    render(<DashboardSettings />);
+    expect(screen.getByText("23")).toBeInTheDocument();
+    expect(screen.getByText("cases this month")).toBeInTheDocument();
+  });
+
+  it("shows Upgrade to Pro button for FREE plan", () => {
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
+    render(<DashboardSettings />);
+    const buttons = screen.getAllByText("Upgrade to Pro");
+    expect(buttons.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows Pro badge and active date for PRO plan", () => {
+    mocks.useLoaderData.mockReturnValue({
+      ...defaultLoaderData,
+      planTier: "PRO" as const,
+      billingActivatedAt: "2026-03-10T00:00:00.000Z",
+      monthlyUsage: 50,
+    });
+    render(<DashboardSettings />);
+    expect(screen.getByText("Pro")).toBeInTheDocument();
+    expect(screen.getByText(/Active since/)).toBeInTheDocument();
+  });
+
+  it("does not show Upgrade button for PRO plan", () => {
+    mocks.useLoaderData.mockReturnValue({
+      ...defaultLoaderData,
+      planTier: "PRO" as const,
+      billingActivatedAt: "2026-03-10T00:00:00.000Z",
+    });
+    render(<DashboardSettings />);
+    expect(screen.queryByText("Upgrade to Pro")).not.toBeInTheDocument();
+  });
+
+  it("shows Shopify admin note for PRO plan", () => {
+    mocks.useLoaderData.mockReturnValue({
+      ...defaultLoaderData,
+      planTier: "PRO" as const,
+      billingActivatedAt: "2026-03-10T00:00:00.000Z",
+    });
+    render(<DashboardSettings />);
+    expect(
+      screen.getByText("Subscription is managed through your Shopify admin.")
+    ).toBeInTheDocument();
+  });
+
+  it("shows approaching limit warning when usage is high", () => {
+    mocks.useLoaderData.mockReturnValue({
+      ...defaultLoaderData,
+      monthlyUsage: 95,
+    });
+    render(<DashboardSettings />);
+    expect(screen.getByText("Approaching monthly limit")).toBeInTheDocument();
+  });
+
+  it("shows limit reached warning when usage hits max", () => {
+    mocks.useLoaderData.mockReturnValue({
+      ...defaultLoaderData,
+      monthlyUsage: 100,
+    });
+    render(<DashboardSettings />);
+    expect(
+      screen.getByText("Monthly limit reached — new cases are paused")
+    ).toBeInTheDocument();
+  });
+
+  it("shows locked Attempt 3 with upgrade prompt on FREE plan", () => {
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
+    render(<DashboardSettings />);
+    expect(screen.getByText("Attempt 3")).toBeInTheDocument();
+    expect(screen.getByText("Upgrade to Pro to unlock 3-step sequences")).toBeInTheDocument();
+  });
+
+  it("does not show locked Attempt 3 on PRO plan", () => {
+    mocks.useLoaderData.mockReturnValue({
+      ...defaultLoaderData,
+      planTier: "PRO" as const,
+    });
+    render(<DashboardSettings />);
+    expect(screen.getByText("Attempt 3")).toBeInTheDocument();
+    expect(screen.queryByText("Upgrade to Pro to unlock 3-step sequences")).not.toBeInTheDocument();
+  });
+
+  it("shows Pro badges on locked features for FREE plan", () => {
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
+    render(<DashboardSettings />);
+    const proBadges = screen.getAllByText("Pro");
+    expect(proBadges.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does not show Twilio credentials note on FREE plan", () => {
+    mocks.useLoaderData.mockReturnValue(defaultLoaderData);
+    render(<DashboardSettings />);
+    expect(screen.queryByText(/Requires Twilio credentials/)).not.toBeInTheDocument();
+  });
+
+  it("shows Twilio credentials note on PRO plan", () => {
+    mocks.useLoaderData.mockReturnValue({
+      ...defaultLoaderData,
+      planTier: "PRO" as const,
+    });
+    render(<DashboardSettings />);
+    expect(screen.getByText(/Requires Twilio credentials/)).toBeInTheDocument();
+  });
+
 });

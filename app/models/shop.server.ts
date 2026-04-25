@@ -61,3 +61,15 @@ export async function updateShopSettings(
     data: { settingsJson: settings },
   });
 }
+
+export async function updateShopPlan(
+  shopId: number,
+  planTier: string,
+  billingSubscriptionId: string | null,
+  billingActivatedAt: Date | null
+): Promise<Shop> {
+  return prisma.shop.update({
+    where: { id: shopId },
+    data: { planTier, billingSubscriptionId, billingActivatedAt },
+  });
+}

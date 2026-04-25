@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockRequireShopId = vi.fn();
 const mockGetCaseById = vi.fn();
+const mockGetSignalsForCheckout = vi.fn();
+const mockGetOptOutRecord = vi.fn();
+const mockTransitionCaseStatus = vi.fn();
+const mockCancelPendingMessages = vi.fn();
 
 vi.mock("~/lib/session.server", () => ({
   requireShopId: (...args: unknown[]) => mockRequireShopId(...args),
@@ -9,6 +13,31 @@ vi.mock("~/lib/session.server", () => ({
 
 vi.mock("~/models/recovery-case.server", () => ({
   getCaseById: (...args: unknown[]) => mockGetCaseById(...args),
+  transitionCaseStatus: (...args: unknown[]) => mockTransitionCaseStatus(...args),
+}));
+
+vi.mock("~/models/recovery-message.server", () => ({
+  cancelPendingMessages: (...args: unknown[]) => mockCancelPendingMessages(...args),
+}));
+
+vi.mock("~/models/payment-signal.server", () => ({
+  getSignalsForCheckout: (...args: unknown[]) => mockGetSignalsForCheckout(...args),
+}));
+
+vi.mock("~/models/sms-opt-out.server", () => ({
+  getOptOutRecord: (...args: unknown[]) => mockGetOptOutRecord(...args),
+}));
+
+vi.mock("@prisma/client", () => ({
+  CaseStatus: {
+    CANDIDATE: "CANDIDATE",
+    READY: "READY",
+    MESSAGING: "MESSAGING",
+    RECOVERED: "RECOVERED",
+    SUPPRESSED: "SUPPRESSED",
+    EXPIRED: "EXPIRED",
+    CANCELLED: "CANCELLED",
+  },
 }));
 
 import { loader } from "~/routes/dashboard.cases.$id";
@@ -20,6 +49,8 @@ function buildRequest(): Request {
 describe("dashboard.cases.$id", () => {
   const mockCase = {
     id: 42,
+    shopId: 10,
+    checkoutId: 1,
     caseStatus: "MESSAGING",
     caseType: "CONFIRMED_DECLINE",
     confidenceScore: 85,
@@ -34,6 +65,8 @@ describe("dashboard.cases.$id", () => {
     vi.resetAllMocks();
     mockRequireShopId.mockResolvedValue(10);
     mockGetCaseById.mockResolvedValue(mockCase);
+    mockGetSignalsForCheckout.mockResolvedValue([]);
+    mockGetOptOutRecord.mockResolvedValue(null);
   });
 
   describe("loader", () => {

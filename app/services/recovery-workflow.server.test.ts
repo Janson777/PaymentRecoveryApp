@@ -11,6 +11,9 @@ const mockFindShopById = vi.fn();
 const mockParseShopSettings = vi.fn();
 const mockGetChannelForStep = vi.fn();
 const mockQueueAdd = vi.fn();
+const mockGetShopPlanTier = vi.fn();
+const mockGetMaxSequenceSteps = vi.fn();
+const mockIsChannelAllowed = vi.fn();
 
 vi.mock("~/models/recovery-case.server", () => ({
   transitionCaseStatus: (...args: unknown[]) =>
@@ -41,6 +44,12 @@ vi.mock("~/lib/settings", () => ({
   getChannelForStep: (...args: unknown[]) => mockGetChannelForStep(...args),
 }));
 
+vi.mock("~/lib/plan.server", () => ({
+  getShopPlanTier: (...args: unknown[]) => mockGetShopPlanTier(...args),
+  getMaxSequenceSteps: (...args: unknown[]) => mockGetMaxSequenceSteps(...args),
+  isChannelAllowed: (...args: unknown[]) => mockIsChannelAllowed(...args),
+}));
+
 import {
   promoteReadyCases,
   suppressCase,
@@ -62,6 +71,9 @@ describe("recovery-workflow", () => {
     mockParseShopSettings.mockReturnValue({
       retryDelays: [15, 720, 2160],
     });
+    mockGetShopPlanTier.mockReturnValue("PRO");
+    mockGetMaxSequenceSteps.mockReturnValue(3);
+    mockIsChannelAllowed.mockReturnValue(true);
   });
 
   describe("getSmsCopy", () => {
@@ -210,7 +222,7 @@ describe("recovery-workflow", () => {
         { id: 3, shopId: 20 },
       ];
       mockGetCasesReadyForMessaging.mockResolvedValue(cases);
-      mockFindShopById.mockResolvedValue({ id: 10, settingsJson: {} });
+      mockFindShopById.mockResolvedValue({ id: 10, planTier: "PRO", settingsJson: {} });
       mockCreateRecoveryMessage.mockResolvedValue({ id: 100 });
 
       const count = await promoteReadyCases();
@@ -243,7 +255,7 @@ describe("recovery-workflow", () => {
       mockGetCasesReadyForMessaging.mockResolvedValue([
         { id: 1, shopId: 10 },
       ]);
-      mockFindShopById.mockResolvedValue({ id: 10, settingsJson: {} });
+      mockFindShopById.mockResolvedValue({ id: 10, planTier: "PRO", settingsJson: {} });
       mockCreateRecoveryMessage.mockResolvedValue({ id: 100 });
 
       await promoteReadyCases();
@@ -260,7 +272,7 @@ describe("recovery-workflow", () => {
       mockGetCasesReadyForMessaging.mockResolvedValue([
         { id: 5, shopId: 10 },
       ]);
-      mockFindShopById.mockResolvedValue({ id: 10, settingsJson: {} });
+      mockFindShopById.mockResolvedValue({ id: 10, planTier: "PRO", settingsJson: {} });
       mockCreateRecoveryMessage.mockResolvedValue({ id: 200 });
     });
 
@@ -296,21 +308,6 @@ describe("recovery-workflow", () => {
         12 * 3_600_000,
         36 * 3_600_000,
       ]);
-    });
-
-    it("uses getChannelForStep to determine channel per step", async () => {
-      mockGetChannelForStep
-        .mockReturnValueOnce("SMS")
-        .mockReturnValueOnce("EMAIL")
-        .mockReturnValueOnce("SMS");
-
-      await promoteReadyCases();
-
-      const channels = mockCreateRecoveryMessage.mock.calls.map(
-        (call: unknown[]) =>
-          (call[0] as { channel: Channel }).channel
-      );
-      expect(channels).toEqual([Channel.SMS, Channel.EMAIL, Channel.SMS]);
     });
 
     it("creates messages with correct sequenceStep (1-indexed)", async () => {
@@ -355,6 +352,21 @@ describe("recovery-workflow", () => {
       );
     });
 
+    it("uses getChannelForStep to determine channel per step", async () => {
+      mockGetChannelForStep
+        .mockReturnValueOnce("SMS")
+        .mockReturnValueOnce("EMAIL")
+        .mockReturnValueOnce("SMS");
+
+      await promoteReadyCases();
+
+      const channels = mockCreateRecoveryMessage.mock.calls.map(
+        (call: unknown[]) =>
+          (call[0] as { channel: Channel }).channel
+      );
+      expect(channels).toEqual([Channel.SMS, Channel.EMAIL, Channel.SMS]);
+    });
+
     it("skips NONE steps and creates fewer messages", async () => {
       mockGetChannelForStep
         .mockReturnValueOnce("EMAIL")
@@ -387,13 +399,42 @@ describe("recovery-workflow", () => {
       expect(lastCall).toEqual([5, CaseStatus.MESSAGING]);
     });
 
-    it("handles null shop gracefully", async () => {
+    it("handles null shop gracefully (defaults to FREE plan, 2 steps)", async () => {
       mockFindShopById.mockResolvedValue(null);
+      mockGetShopPlanTier.mockReturnValue("FREE");
+      mockGetMaxSequenceSteps.mockReturnValue(2);
 
       await promoteReadyCases();
 
       expect(mockParseShopSettings).toHaveBeenCalledWith(undefined);
-      expect(mockCreateRecoveryMessage).toHaveBeenCalledTimes(3);
+      expect(mockCreateRecoveryMessage).toHaveBeenCalledTimes(2);
+    });
+
+    it("limits FREE plan to 2 sequence steps", async () => {
+      mockGetShopPlanTier.mockReturnValue("FREE");
+      mockGetMaxSequenceSteps.mockReturnValue(2);
+
+      await promoteReadyCases();
+
+      expect(mockCreateRecoveryMessage).toHaveBeenCalledTimes(2);
+      expect(mockQueueAdd).toHaveBeenCalledTimes(2);
+    });
+
+    it("falls back SMS to EMAIL on FREE plan", async () => {
+      mockGetShopPlanTier.mockReturnValue("FREE");
+      mockGetMaxSequenceSteps.mockReturnValue(2);
+      mockIsChannelAllowed.mockImplementation((_tier: string, ch: string) => ch !== "SMS");
+      mockGetChannelForStep
+        .mockReturnValueOnce("SMS")
+        .mockReturnValueOnce("EMAIL");
+
+      await promoteReadyCases();
+
+      const channels = mockCreateRecoveryMessage.mock.calls.map(
+        (call: unknown[]) =>
+          (call[0] as { channel: Channel }).channel
+      );
+      expect(channels).toEqual([Channel.EMAIL, Channel.EMAIL]);
     });
   });
 

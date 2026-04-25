@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockRequireShopId = vi.fn();
 const mockFindShopById = vi.fn();
 const mockUpdateShopSettings = vi.fn();
+const mockGetMonthlyUsageCount = vi.fn();
 
 vi.mock("~/lib/session.server", () => ({
   requireShopId: (...args: unknown[]) => mockRequireShopId(...args),
@@ -11,6 +12,11 @@ vi.mock("~/lib/session.server", () => ({
 vi.mock("~/models/shop.server", () => ({
   findShopById: (...args: unknown[]) => mockFindShopById(...args),
   updateShopSettings: (...args: unknown[]) => mockUpdateShopSettings(...args),
+}));
+
+vi.mock("~/lib/plan.server", () => ({
+  getMonthlyUsageCount: (...args: unknown[]) => mockGetMonthlyUsageCount(...args),
+  FREE_CASES_LIMIT: 100,
 }));
 
 import { loader, action } from "~/routes/dashboard.settings";
@@ -37,8 +43,11 @@ describe("dashboard.settings", () => {
       id: 10,
       shopDomain: "test.myshopify.com",
       settingsJson: null,
+      planTier: "FREE",
+      billingActivatedAt: null,
     });
     mockUpdateShopSettings.mockResolvedValue(undefined);
+    mockGetMonthlyUsageCount.mockResolvedValue(0);
   });
 
   describe("loader", () => {
@@ -75,6 +84,8 @@ describe("dashboard.settings", () => {
       mockFindShopById.mockResolvedValue({
         id: 42,
         settingsJson: null,
+        planTier: "FREE",
+        billingActivatedAt: null,
       });
       const request = buildGetRequest();
       await loader({ request, params: {}, context: {} });
@@ -86,6 +97,8 @@ describe("dashboard.settings", () => {
       mockFindShopById.mockResolvedValue({
         id: 10,
         settingsJson: null,
+        planTier: "FREE",
+        billingActivatedAt: null,
       });
       const request = buildGetRequest();
       const response = await loader({ request, params: {}, context: {} });
@@ -102,6 +115,8 @@ describe("dashboard.settings", () => {
           retryDelays: [30, 60],
           smsEnabled: true,
         },
+        planTier: "FREE",
+        billingActivatedAt: null,
       });
       const request = buildGetRequest();
       const response = await loader({ request, params: {}, context: {} });
@@ -113,6 +128,61 @@ describe("dashboard.settings", () => {
       expect(data.settings.emailTemplates).toEqual(
         DEFAULT_SETTINGS.emailTemplates
       );
+    });
+
+    it("returns planTier from shop record", async () => {
+      mockFindShopById.mockResolvedValue({
+        id: 10,
+        settingsJson: null,
+        planTier: "PRO",
+        billingActivatedAt: new Date("2026-03-10T00:00:00Z"),
+      });
+      const request = buildGetRequest();
+      const response = await loader({ request, params: {}, context: {} });
+      const data = await response.json();
+
+      expect(data.planTier).toBe("PRO");
+      expect(data.billingActivatedAt).toBe("2026-03-10T00:00:00.000Z");
+    });
+
+    it("returns FREE planTier when shop has no plan", async () => {
+      mockFindShopById.mockResolvedValue({
+        id: 10,
+        settingsJson: null,
+        planTier: "FREE",
+        billingActivatedAt: null,
+      });
+      const request = buildGetRequest();
+      const response = await loader({ request, params: {}, context: {} });
+      const data = await response.json();
+
+      expect(data.planTier).toBe("FREE");
+      expect(data.billingActivatedAt).toBeNull();
+    });
+
+    it("returns monthlyUsage from getMonthlyUsageCount", async () => {
+      mockGetMonthlyUsageCount.mockResolvedValue(42);
+      const request = buildGetRequest();
+      const response = await loader({ request, params: {}, context: {} });
+      const data = await response.json();
+
+      expect(data.monthlyUsage).toBe(42);
+      expect(mockGetMonthlyUsageCount).toHaveBeenCalledWith(10);
+    });
+
+    it("returns shopDomain from the shop record", async () => {
+      mockFindShopById.mockResolvedValue({
+        id: 10,
+        shopDomain: "widgets.myshopify.com",
+        settingsJson: null,
+        planTier: "FREE",
+        billingActivatedAt: null,
+      });
+      const request = buildGetRequest();
+      const response = await loader({ request, params: {}, context: {} });
+      const data = await response.json();
+
+      expect(data.shopDomain).toBe("widgets.myshopify.com");
     });
   });
 

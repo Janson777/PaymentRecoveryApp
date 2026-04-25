@@ -11,7 +11,7 @@ vi.mock("~/models/shop.server", () => ({
 }));
 
 const mocks = vi.hoisted(() => ({
-  useLoaderData: vi.fn().mockReturnValue({ shopDomain: "test-store.myshopify.com" }),
+  useLoaderData: vi.fn().mockReturnValue({ shopDomain: "test-store.myshopify.com", planTier: "FREE" }),
 }));
 
 vi.mock("@remix-run/react", async () => {
@@ -24,6 +24,8 @@ vi.mock("@remix-run/react", async () => {
       const { ...rest } = props;
       return React.createElement("a", { ...rest, href: to, className: cls }, children as React.ReactNode);
     },
+    Link: ({ to, children, ...props }: Record<string, unknown>) =>
+      React.createElement("a", { ...props, href: to }, children as React.ReactNode),
   };
 });
 
@@ -47,8 +49,45 @@ describe("DashboardLayout component", () => {
     expect(screen.getByText("Settings")).toBeInTheDocument();
   });
 
-  it("renders the Recovery brand text", () => {
+  it("renders the BitPushy logo", () => {
     render(<DashboardLayout />);
-    expect(screen.getByText("Recovery")).toBeInTheDocument();
+    expect(screen.getByLabelText("BitPushy")).toBeInTheDocument();
+  });
+
+  describe("sidebar upgrade banner", () => {
+    it("renders upgrade banner for FREE users", () => {
+      mocks.useLoaderData.mockReturnValue({
+        shopDomain: "test-store.myshopify.com",
+        planTier: "FREE",
+      });
+      render(<DashboardLayout />);
+      expect(screen.getByText("Upgrade to Pro")).toBeInTheDocument();
+      expect(
+        screen.getByText(/Unlimited cases, SMS recovery/)
+      ).toBeInTheDocument();
+    });
+
+    it("renders View Plans link pointing to settings", () => {
+      mocks.useLoaderData.mockReturnValue({
+        shopDomain: "test-store.myshopify.com",
+        planTier: "FREE",
+      });
+      render(<DashboardLayout />);
+      const viewPlansLink = screen.getByText("View Plans");
+      expect(viewPlansLink.closest("a")).toHaveAttribute(
+        "href",
+        "/dashboard/settings"
+      );
+    });
+
+    it("hides upgrade banner for PRO users", () => {
+      mocks.useLoaderData.mockReturnValue({
+        shopDomain: "test-store.myshopify.com",
+        planTier: "PRO",
+      });
+      render(<DashboardLayout />);
+      expect(screen.queryByText("Upgrade to Pro")).not.toBeInTheDocument();
+      expect(screen.queryByText("View Plans")).not.toBeInTheDocument();
+    });
   });
 });

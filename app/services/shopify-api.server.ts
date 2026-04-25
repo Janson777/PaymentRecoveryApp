@@ -25,17 +25,19 @@ export async function registerWebhooks(
   shopDomain: string,
   accessToken: string
 ): Promise<void> {
-  const topics = [
-    "orders/create",
-    "orders/updated",
-    "checkouts/create",
-    "checkouts/update",
-    "app/uninstalled",
+  const appUrl = process.env.APP_URL;
+
+  const webhookRegistrations: { topic: string; address: string }[] = [
+    { topic: "orders/create", address: `${appUrl}/webhooks/shopify` },
+    { topic: "orders/updated", address: `${appUrl}/webhooks/shopify` },
+    { topic: "checkouts/create", address: `${appUrl}/webhooks/shopify` },
+    { topic: "checkouts/update", address: `${appUrl}/webhooks/shopify` },
+    { topic: "app/uninstalled", address: `${appUrl}/webhooks/shopify` },
+    { topic: "app_subscriptions/update", address: `${appUrl}/webhooks/billing` },
   ];
 
-  const appUrl = process.env.APP_URL;
   const results = await Promise.allSettled(
-    topics.map((topic) =>
+    webhookRegistrations.map(({ topic, address }) =>
       fetch(
         `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`,
         {
@@ -47,7 +49,7 @@ export async function registerWebhooks(
           body: JSON.stringify({
             webhook: {
               topic,
-              address: `${appUrl}/webhooks/shopify`,
+              address,
               format: "json",
             },
           }),
@@ -68,7 +70,7 @@ export async function registerWebhooks(
     (r) => r.status === "fulfilled" && r.value.status >= 200 && r.value.status < 300
   ).length;
   console.log(
-    `Registered ${registered}/${topics.length} webhooks for ${shopDomain}`
+    `Registered ${registered}/${webhookRegistrations.length} webhooks for ${shopDomain}`
   );
 }
 
@@ -129,6 +131,51 @@ export async function shopifyGraphQL<T>(
   return result.data;
 }
 
+export const BILLING_MUTATIONS = {
+  appSubscriptionCreate: `
+    mutation AppSubscriptionCreate($name: String!, $returnUrl: URL!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean) {
+      appSubscriptionCreate(name: $name, returnUrl: $returnUrl, lineItems: $lineItems, test: $test) {
+        userErrors {
+          field
+          message
+        }
+        appSubscription {
+          id
+          status
+        }
+        confirmationUrl
+      }
+    }
+  `,
+} as const;
+
+export const BILLING_QUERIES = {
+  getSubscription: `
+    query GetSubscription($id: ID!) {
+      node(id: $id) {
+        ... on AppSubscription {
+          id
+          name
+          status
+          createdAt
+        }
+      }
+    }
+  `,
+
+  activeSubscriptions: `
+    query ActiveSubscriptions {
+      currentAppInstallation {
+        activeSubscriptions {
+          id
+          name
+          status
+        }
+      }
+    }
+  `,
+} as const;
+
 export const QUERIES = {
   abandonedCheckouts: `
     query AbandonedCheckouts($first: Int!, $after: String) {
@@ -146,6 +193,12 @@ export const QUERIES = {
             customer {
               id
               email
+              phone
+            }
+            shippingAddress {
+              phone
+            }
+            billingAddress {
               phone
             }
             lineItems(first: 10) {

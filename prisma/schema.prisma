@@ -71,6 +71,9 @@ model Shop {
   uninstalledAt         DateTime?
   defaultTimezone       String    @default("UTC")
   settingsJson          Json?
+  planTier              String    @default("FREE")
+  billingSubscriptionId String?
+  billingActivatedAt    DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 

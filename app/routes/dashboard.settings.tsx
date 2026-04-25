@@ -4,7 +4,9 @@ import { useLoaderData } from "@remix-run/react";
 import { Prisma } from "@prisma/client";
 import { requireShopId } from "~/lib/session.server";
 import { findShopById, updateShopSettings } from "~/models/shop.server";
+import { getMonthlyUsageCount, FREE_CASES_LIMIT } from "~/lib/plan.server";
 import { SettingsForm } from "~/components/SettingsForm";
+import { PlanCard } from "~/components/PlanCard";
 import {
   type ShopSettings,
   DEFAULT_SETTINGS,
@@ -20,8 +22,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   const settings = parseShopSettings(shop.settingsJson);
+  const monthlyUsage = await getMonthlyUsageCount(shopId);
 
-  return json({ settings });
+  return json({
+    settings,
+    planTier: (shop.planTier === "PRO" ? "PRO" : "FREE") as "FREE" | "PRO",
+    billingActivatedAt: shop.billingActivatedAt
+      ? shop.billingActivatedAt.toISOString()
+      : null,
+    monthlyUsage,
+    maxCasesPerMonth: FREE_CASES_LIMIT,
+    shopDomain: shop.shopDomain,
+  });
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -89,11 +101,28 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function DashboardSettings() {
-  const { settings } = useLoaderData<typeof loader>();
+  const {
+    settings,
+    planTier,
+    billingActivatedAt,
+    monthlyUsage,
+    maxCasesPerMonth,
+    shopDomain,
+  } = useLoaderData<typeof loader>();
 
   return (
-    <div>
-      <SettingsForm settings={settings} />
+    <div className="space-y-8">
+      <PlanCard
+        planTier={planTier}
+        billingActivatedAt={billingActivatedAt}
+        monthlyUsage={monthlyUsage}
+        maxCasesPerMonth={maxCasesPerMonth}
+      />
+      <SettingsForm
+        settings={settings}
+        planTier={planTier}
+        shopDomain={shopDomain}
+      />
     </div>
   );
 }
