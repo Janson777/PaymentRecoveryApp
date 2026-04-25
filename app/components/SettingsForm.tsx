@@ -171,6 +171,9 @@ export function SettingsForm({
               <p className="-mt-3 pl-7 text-xs text-gray-400">
                 Requires Twilio credentials configured in your environment.
               </p>
+              {smsEnabled && (
+                <PhoneCollectionBanner shopDomain={shopDomain} />
+              )}
             </>
           )}
 
@@ -407,6 +410,83 @@ export function SettingsForm({
         </div>
       </div>
     </Form>
+  );
+}
+
+function PhoneCollectionBanner({ shopDomain }: { shopDomain: string }) {
+  const adminUrl = `https://${shopDomain}/admin/settings/checkout`;
+  const helpUrl =
+    "https://help.shopify.com/en/manual/checkout-settings/customer-contact";
+
+  return (
+    <div
+      role="note"
+      aria-label="Phone number collection requirement"
+      className="rounded-lg border border-amber-200 bg-amber-50 p-4"
+    >
+      <div className="flex gap-3">
+        <svg
+          className="h-5 w-5 shrink-0 text-amber-500"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            fillRule="evenodd"
+            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l6.518 11.59c.75 1.334-.213 2.98-1.742 2.98H3.48c-1.53 0-2.492-1.646-1.743-2.98L8.257 3.099zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+            clipRule="evenodd"
+          />
+        </svg>
+        <div className="flex-1 text-sm">
+          <h3 className="font-semibold text-amber-900">
+            Make sure your checkout collects phone numbers
+          </h3>
+          <p className="mt-1 text-amber-800">
+            SMS recovery only works for customers who provide a phone number at
+            checkout. In your Shopify admin, set{" "}
+            <span className="font-medium">Shipping address phone number</span>{" "}
+            to <span className="font-medium">Optional</span> or{" "}
+            <span className="font-medium">Required</span>. Customers without a
+            phone on file will automatically fall back to email.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <a
+              href={adminUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600"
+            >
+              Open checkout settings
+              <svg
+                className="h-3 w-3"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M4.25 5.5a.75.75 0 00-.75.75v8.5a.75.75 0 00.75.75h8.5a.75.75 0 00.75-.75V10a.75.75 0 011.5 0v4.75A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4H9a.75.75 0 010 1.5H4.25z"
+                  clipRule="evenodd"
+                />
+                <path
+                  fillRule="evenodd"
+                  d="M6.194 12.753a.75.75 0 001.06.053L16.5 4.44v2.81a.75.75 0 001.5 0v-4.5a.75.75 0 00-.75-.75h-4.5a.75.75 0 000 1.5h2.553l-9.056 8.194a.75.75 0 00-.053 1.06z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </a>
+            <a
+              href={helpUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-amber-800 underline-offset-2 hover:underline"
+            >
+              Learn more in Shopify Help
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

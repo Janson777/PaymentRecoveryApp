@@ -408,4 +408,84 @@ describe("DashboardSettings component", () => {
     expect(screen.getByText(/Requires Twilio credentials/)).toBeInTheDocument();
   });
 
+  describe("phone collection banner", () => {
+    it("does not show banner on FREE plan (SMS is locked)", () => {
+      mocks.useLoaderData.mockReturnValue(defaultLoaderData);
+      render(<DashboardSettings />);
+      expect(
+        screen.queryByText("Make sure your checkout collects phone numbers")
+      ).not.toBeInTheDocument();
+    });
+
+    it("does not show banner on PRO plan when SMS is disabled", () => {
+      mocks.useLoaderData.mockReturnValue({
+        ...defaultLoaderData,
+        planTier: "PRO" as const,
+        settings: { ...MOCK_SETTINGS, smsEnabled: false },
+      });
+      render(<DashboardSettings />);
+      expect(
+        screen.queryByText("Make sure your checkout collects phone numbers")
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows banner on PRO plan when SMS is enabled", () => {
+      mocks.useLoaderData.mockReturnValue({
+        ...defaultLoaderData,
+        planTier: "PRO" as const,
+        settings: { ...MOCK_SETTINGS, smsEnabled: true },
+      });
+      render(<DashboardSettings />);
+      expect(
+        screen.getByText("Make sure your checkout collects phone numbers")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/SMS recovery only works for customers/)
+      ).toBeInTheDocument();
+    });
+
+    it("banner reassures merchants that missing phones fall back to email", () => {
+      mocks.useLoaderData.mockReturnValue({
+        ...defaultLoaderData,
+        planTier: "PRO" as const,
+        settings: { ...MOCK_SETTINGS, smsEnabled: true },
+      });
+      render(<DashboardSettings />);
+      expect(
+        screen.getByText(/fall back to email/i)
+      ).toBeInTheDocument();
+    });
+
+    it("banner links to the merchant's Shopify admin checkout settings", () => {
+      mocks.useLoaderData.mockReturnValue({
+        ...defaultLoaderData,
+        planTier: "PRO" as const,
+        settings: { ...MOCK_SETTINGS, smsEnabled: true },
+        shopDomain: "acme-widgets.myshopify.com",
+      });
+      render(<DashboardSettings />);
+      const link = screen.getByText("Open checkout settings").closest("a");
+      expect(link).toHaveAttribute(
+        "href",
+        "https://acme-widgets.myshopify.com/admin/settings/checkout"
+      );
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    });
+
+    it("banner includes a link to the Shopify Help docs", () => {
+      mocks.useLoaderData.mockReturnValue({
+        ...defaultLoaderData,
+        planTier: "PRO" as const,
+        settings: { ...MOCK_SETTINGS, smsEnabled: true },
+      });
+      render(<DashboardSettings />);
+      const link = screen.getByText("Learn more in Shopify Help").closest("a");
+      expect(link).toHaveAttribute(
+        "href",
+        expect.stringContaining("help.shopify.com")
+      );
+      expect(link).toHaveAttribute("target", "_blank");
+    });
+  });
 });

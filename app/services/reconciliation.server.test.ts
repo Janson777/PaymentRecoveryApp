@@ -78,6 +78,8 @@ function buildAbandonedCheckoutNode(overrides: Record<string, unknown> = {}) {
       email: "customer@example.com",
       phone: "+15551234567",
     },
+    shippingAddress: null,
+    billingAddress: null,
     ...overrides,
   };
 }
@@ -271,7 +273,8 @@ describe("processReconciliation", () => {
 
       expect(mockMarkCheckoutAbandoned).toHaveBeenCalledWith(
         42,
-        "https://test-store.myshopify.com/checkouts/recover/abc"
+        "https://test-store.myshopify.com/checkouts/recover/abc",
+        { phoneIfMissing: "+15551234567" }
       );
       expect(mockEvaluateAbandonedCheckout).toHaveBeenCalledWith({
         shopId: 10,
@@ -280,6 +283,61 @@ describe("processReconciliation", () => {
         hasShippingInfo: true,
         totalAmount: 99.99,
       });
+    });
+
+    it("passes shipping address phone to markCheckoutAbandoned for backfill", async () => {
+      const node = buildAbandonedCheckoutNode({
+        customer: {
+          id: "gid://shopify/Customer/1",
+          email: "x@y.com",
+          phone: null,
+        },
+        shippingAddress: { phone: "+15557777777" },
+      });
+      mockShopifyGraphQL.mockResolvedValue(buildGraphQLResponse([node]));
+      mockFindCheckoutByShopifyId.mockResolvedValue({
+        id: 42,
+        checkoutStatus: "ACTIVE",
+      });
+
+      await processReconciliation({
+        shopId: 10,
+        jobType: "abandoned_checkout",
+      });
+
+      expect(mockMarkCheckoutAbandoned).toHaveBeenCalledWith(
+        42,
+        expect.any(String),
+        { phoneIfMissing: "+15557777777" }
+      );
+    });
+
+    it("passes null phoneIfMissing when no phone source has a value", async () => {
+      const node = buildAbandonedCheckoutNode({
+        customer: {
+          id: "gid://shopify/Customer/1",
+          email: "x@y.com",
+          phone: null,
+        },
+        shippingAddress: null,
+        billingAddress: null,
+      });
+      mockShopifyGraphQL.mockResolvedValue(buildGraphQLResponse([node]));
+      mockFindCheckoutByShopifyId.mockResolvedValue({
+        id: 42,
+        checkoutStatus: "ACTIVE",
+      });
+
+      await processReconciliation({
+        shopId: 10,
+        jobType: "abandoned_checkout",
+      });
+
+      expect(mockMarkCheckoutAbandoned).toHaveBeenCalledWith(
+        42,
+        expect.any(String),
+        { phoneIfMissing: null }
+      );
     });
 
     it("sets hasContactInfo true when customer has email", async () => {
@@ -355,6 +413,80 @@ describe("processReconciliation", () => {
           email: null,
           phone: null,
         },
+      });
+      mockShopifyGraphQL.mockResolvedValue(buildGraphQLResponse([node]));
+      mockFindCheckoutByShopifyId.mockResolvedValue({
+        id: 42,
+        checkoutStatus: "ACTIVE",
+      });
+
+      await processReconciliation({
+        shopId: 10,
+        jobType: "abandoned_checkout",
+      });
+
+      expect(mockEvaluateAbandonedCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ hasContactInfo: false })
+      );
+    });
+
+    it("sets hasContactInfo true when only shippingAddress.phone is present", async () => {
+      const node = buildAbandonedCheckoutNode({
+        customer: {
+          id: "gid://shopify/Customer/1",
+          email: null,
+          phone: null,
+        },
+        shippingAddress: { phone: "+15557777777" },
+        billingAddress: null,
+      });
+      mockShopifyGraphQL.mockResolvedValue(buildGraphQLResponse([node]));
+      mockFindCheckoutByShopifyId.mockResolvedValue({
+        id: 42,
+        checkoutStatus: "ACTIVE",
+      });
+
+      await processReconciliation({
+        shopId: 10,
+        jobType: "abandoned_checkout",
+      });
+
+      expect(mockEvaluateAbandonedCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ hasContactInfo: true })
+      );
+    });
+
+    it("sets hasContactInfo true when only billingAddress.phone is present", async () => {
+      const node = buildAbandonedCheckoutNode({
+        customer: null,
+        shippingAddress: null,
+        billingAddress: { phone: "+15558888888" },
+      });
+      mockShopifyGraphQL.mockResolvedValue(buildGraphQLResponse([node]));
+      mockFindCheckoutByShopifyId.mockResolvedValue({
+        id: 42,
+        checkoutStatus: "ACTIVE",
+      });
+
+      await processReconciliation({
+        shopId: 10,
+        jobType: "abandoned_checkout",
+      });
+
+      expect(mockEvaluateAbandonedCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ hasContactInfo: true })
+      );
+    });
+
+    it("treats empty-string address phones as missing", async () => {
+      const node = buildAbandonedCheckoutNode({
+        customer: {
+          id: "gid://shopify/Customer/1",
+          email: null,
+          phone: null,
+        },
+        shippingAddress: { phone: "" },
+        billingAddress: { phone: "   " },
       });
       mockShopifyGraphQL.mockResolvedValue(buildGraphQLResponse([node]));
       mockFindCheckoutByShopifyId.mockResolvedValue({

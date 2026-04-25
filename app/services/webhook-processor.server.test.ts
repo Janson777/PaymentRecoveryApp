@@ -372,6 +372,239 @@ describe("processWebhookEvent", () => {
     });
   });
 
+  describe("phone extraction fallback chain", () => {
+    it("uses top-level payload.phone when present", async () => {
+      mockWebhookFindUnique.mockResolvedValue(
+        buildEvent({
+          topic: "checkouts/create",
+          payloadJson: {
+            id: "chk_p1",
+            phone: "+15550000001",
+            shipping_address: { phone: "+15550000002" },
+            billing_address: { phone: "+15550000003" },
+            customer: { phone: "+15550000004" },
+          },
+        })
+      );
+
+      await processWebhookEvent({
+        webhookEventId: 1,
+        shopId: 10,
+        topic: "checkouts/create",
+      });
+
+      expect(mockUpsertCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: "+15550000001" })
+      );
+    });
+
+    it("falls back to shipping_address.phone when top-level phone is missing", async () => {
+      mockWebhookFindUnique.mockResolvedValue(
+        buildEvent({
+          topic: "checkouts/create",
+          payloadJson: {
+            id: "chk_p2",
+            shipping_address: { phone: "+15550000002" },
+            billing_address: { phone: "+15550000003" },
+            customer: { phone: "+15550000004" },
+          },
+        })
+      );
+
+      await processWebhookEvent({
+        webhookEventId: 1,
+        shopId: 10,
+        topic: "checkouts/create",
+      });
+
+      expect(mockUpsertCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: "+15550000002" })
+      );
+    });
+
+    it("falls back to billing_address.phone when top-level and shipping phone are missing", async () => {
+      mockWebhookFindUnique.mockResolvedValue(
+        buildEvent({
+          topic: "checkouts/create",
+          payloadJson: {
+            id: "chk_p3",
+            billing_address: { phone: "+15550000003" },
+            customer: { phone: "+15550000004" },
+          },
+        })
+      );
+
+      await processWebhookEvent({
+        webhookEventId: 1,
+        shopId: 10,
+        topic: "checkouts/create",
+      });
+
+      expect(mockUpsertCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: "+15550000003" })
+      );
+    });
+
+    it("falls back to customer.phone as the last resort", async () => {
+      mockWebhookFindUnique.mockResolvedValue(
+        buildEvent({
+          topic: "checkouts/create",
+          payloadJson: {
+            id: "chk_p4",
+            customer: { phone: "+15550000004" },
+          },
+        })
+      );
+
+      await processWebhookEvent({
+        webhookEventId: 1,
+        shopId: 10,
+        topic: "checkouts/create",
+      });
+
+      expect(mockUpsertCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: "+15550000004" })
+      );
+    });
+
+    it("returns undefined when no source has a phone", async () => {
+      mockWebhookFindUnique.mockResolvedValue(
+        buildEvent({
+          topic: "checkouts/create",
+          payloadJson: {
+            id: "chk_p5",
+            email: "only-email@example.com",
+          },
+        })
+      );
+
+      await processWebhookEvent({
+        webhookEventId: 1,
+        shopId: 10,
+        topic: "checkouts/create",
+      });
+
+      expect(mockUpsertCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: undefined })
+      );
+    });
+
+    it("treats empty-string top-level phone as missing and uses shipping fallback", async () => {
+      mockWebhookFindUnique.mockResolvedValue(
+        buildEvent({
+          topic: "checkouts/create",
+          payloadJson: {
+            id: "chk_p6",
+            phone: "",
+            shipping_address: { phone: "+15550000002" },
+          },
+        })
+      );
+
+      await processWebhookEvent({
+        webhookEventId: 1,
+        shopId: 10,
+        topic: "checkouts/create",
+      });
+
+      expect(mockUpsertCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: "+15550000002" })
+      );
+    });
+
+    it("treats whitespace-only phone as missing", async () => {
+      mockWebhookFindUnique.mockResolvedValue(
+        buildEvent({
+          topic: "checkouts/create",
+          payloadJson: {
+            id: "chk_p7",
+            phone: "   ",
+            shipping_address: { phone: "   " },
+            billing_address: { phone: "+15550000003" },
+          },
+        })
+      );
+
+      await processWebhookEvent({
+        webhookEventId: 1,
+        shopId: 10,
+        topic: "checkouts/create",
+      });
+
+      expect(mockUpsertCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: "+15550000003" })
+      );
+    });
+
+    it("trims surrounding whitespace from the chosen phone", async () => {
+      mockWebhookFindUnique.mockResolvedValue(
+        buildEvent({
+          topic: "checkouts/create",
+          payloadJson: {
+            id: "chk_p8",
+            phone: "  +15550000001  ",
+          },
+        })
+      );
+
+      await processWebhookEvent({
+        webhookEventId: 1,
+        shopId: 10,
+        topic: "checkouts/create",
+      });
+
+      expect(mockUpsertCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: "+15550000001" })
+      );
+    });
+
+    it("handles null address objects safely", async () => {
+      mockWebhookFindUnique.mockResolvedValue(
+        buildEvent({
+          topic: "checkouts/create",
+          payloadJson: {
+            id: "chk_p9",
+            shipping_address: null,
+            billing_address: null,
+            customer: null,
+          },
+        })
+      );
+
+      await processWebhookEvent({
+        webhookEventId: 1,
+        shopId: 10,
+        topic: "checkouts/create",
+      });
+
+      expect(mockUpsertCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: undefined })
+      );
+    });
+
+    it("applies the same fallback chain to checkouts/update", async () => {
+      mockWebhookFindUnique.mockResolvedValue(
+        buildEvent({
+          topic: "checkouts/update",
+          payloadJson: {
+            id: "chk_p10",
+            shipping_address: { phone: "+15550009999" },
+          },
+        })
+      );
+
+      await processWebhookEvent({
+        webhookEventId: 1,
+        shopId: 10,
+        topic: "checkouts/update",
+      });
+
+      expect(mockUpsertCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: "+15550009999" })
+      );
+    });
+  });
+
   describe("handleCheckoutUpdate", () => {
     it("maps payload fields identically to checkouts/create", async () => {
       const payload = {

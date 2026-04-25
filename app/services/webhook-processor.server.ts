@@ -4,6 +4,7 @@ import { upsertCheckout } from "~/models/checkout.server";
 import { createPaymentSignal } from "~/models/payment-signal.server";
 import { upsertOrder, markOrderPaid, markOrderCancelled } from "~/models/order.server";
 import { prisma } from "~/lib/db.server";
+import { pickFirstNonEmptyPhone } from "~/lib/phone.server";
 import type { WebhookJobData } from "~/queues/webhook.server";
 
 export async function processWebhookEvent(
@@ -52,6 +53,40 @@ export async function processWebhookEvent(
   }
 }
 
+/**
+ * Extract a phone number from a Shopify checkout webhook payload by
+ * trying the most reliable sources first:
+ *   1. payload.phone                    (set when contact method = phone)
+ *   2. payload.shipping_address.phone   (most common for physical goods)
+ *   3. payload.billing_address.phone    (common for digital goods)
+ *   4. payload.customer.phone           (returning customer profile)
+ *
+ * Returns undefined if no source provides a non-empty value.
+ */
+function extractCheckoutPhone(
+  payload: Record<string, unknown>
+): string | undefined {
+  const shipping = payload.shipping_address as
+    | Record<string, unknown>
+    | undefined
+    | null;
+  const billing = payload.billing_address as
+    | Record<string, unknown>
+    | undefined
+    | null;
+  const customer = payload.customer as
+    | Record<string, unknown>
+    | undefined
+    | null;
+
+  return pickFirstNonEmptyPhone([
+    payload.phone,
+    shipping?.phone,
+    billing?.phone,
+    customer?.phone,
+  ]);
+}
+
 async function handleCheckoutCreate(
   shopId: number,
   payload: Record<string, unknown>
@@ -61,7 +96,7 @@ async function handleCheckoutCreate(
     shopifyCheckoutId: payload.id as string | undefined,
     checkoutToken: payload.token as string | undefined,
     email: payload.email as string | undefined,
-    phone: payload.phone as string | undefined,
+    phone: extractCheckoutPhone(payload),
     customerId: payload.customer_id as string | undefined,
     currency: payload.currency as string | undefined,
     totalAmount: payload.total_price ? Number(payload.total_price) : undefined,
@@ -80,7 +115,7 @@ async function handleCheckoutUpdate(
     shopifyCheckoutId: payload.id as string | undefined,
     checkoutToken: payload.token as string | undefined,
     email: payload.email as string | undefined,
-    phone: payload.phone as string | undefined,
+    phone: extractCheckoutPhone(payload),
     customerId: payload.customer_id as string | undefined,
     currency: payload.currency as string | undefined,
     totalAmount: payload.total_price ? Number(payload.total_price) : undefined,

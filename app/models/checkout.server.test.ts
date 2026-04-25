@@ -4,6 +4,7 @@ import { CheckoutStatus } from "@prisma/client";
 const mockFindFirst = vi.fn();
 const mockCreate = vi.fn();
 const mockUpdate = vi.fn();
+const mockUpdateMany = vi.fn();
 const mockFindMany = vi.fn();
 
 vi.mock("~/lib/db.server", () => ({
@@ -12,6 +13,7 @@ vi.mock("~/lib/db.server", () => ({
       findFirst: (...args: unknown[]) => mockFindFirst(...args),
       create: (...args: unknown[]) => mockCreate(...args),
       update: (...args: unknown[]) => mockUpdate(...args),
+      updateMany: (...args: unknown[]) => mockUpdateMany(...args),
       findMany: (...args: unknown[]) => mockFindMany(...args),
     },
   },
@@ -183,6 +185,7 @@ describe("upsertCheckout", () => {
 describe("markCheckoutAbandoned", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mockUpdateMany.mockResolvedValue({ count: 0 });
   });
 
   it("sets ABANDONED status, abandonedAt, and recoveryUrl", async () => {
@@ -205,6 +208,65 @@ describe("markCheckoutAbandoned", () => {
     expect(call.data.abandonedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
     expect(call.data.abandonedAt.getTime()).toBeLessThanOrEqual(after.getTime());
     expect(result).toEqual(abandoned);
+  });
+
+  it("does not call updateMany when no phoneIfMissing is provided", async () => {
+    mockUpdate.mockResolvedValue({ id: 50 });
+
+    await markCheckoutAbandoned(50, "https://shop.com/recover");
+
+    expect(mockUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("backfills phone via updateMany only when stored phone is null", async () => {
+    mockUpdate.mockResolvedValue({ id: 50 });
+
+    await markCheckoutAbandoned(50, "https://shop.com/recover", {
+      phoneIfMissing: "+15551112222",
+    });
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { id: 50, phone: null },
+      data: { phone: "+15551112222" },
+    });
+    // Status update is still called unconditionally.
+    expect(mockUpdate).toHaveBeenCalled();
+  });
+
+  it("skips updateMany when phoneIfMissing is null", async () => {
+    mockUpdate.mockResolvedValue({ id: 50 });
+
+    await markCheckoutAbandoned(50, "https://shop.com/recover", {
+      phoneIfMissing: null,
+    });
+
+    expect(mockUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("skips updateMany when phoneIfMissing is empty or whitespace", async () => {
+    mockUpdate.mockResolvedValue({ id: 50 });
+
+    await markCheckoutAbandoned(50, "https://shop.com/recover", {
+      phoneIfMissing: "",
+    });
+    await markCheckoutAbandoned(50, "https://shop.com/recover", {
+      phoneIfMissing: "   ",
+    });
+
+    expect(mockUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("trims whitespace from phoneIfMissing before persisting", async () => {
+    mockUpdate.mockResolvedValue({ id: 50 });
+
+    await markCheckoutAbandoned(50, "https://shop.com/recover", {
+      phoneIfMissing: "  +15553334444  ",
+    });
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { id: 50, phone: null },
+      data: { phone: "+15553334444" },
+    });
   });
 });
 

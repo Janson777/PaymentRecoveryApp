@@ -8,6 +8,7 @@ import {
 import { evaluateAbandonedCheckout } from "./decline-detection.server";
 import { expireOldCases, promoteReadyCases } from "./recovery-workflow.server";
 import { getActiveShops } from "~/models/shop.server";
+import { pickFirstNonEmptyPhone } from "~/lib/phone.server";
 import type { ReconciliationJobData } from "~/queues/reconciliation.server";
 
 interface AbandonedCheckoutNode {
@@ -24,6 +25,23 @@ interface AbandonedCheckoutNode {
     email: string | null;
     phone: string | null;
   } | null;
+  shippingAddress: { phone: string | null } | null;
+  billingAddress: { phone: string | null } | null;
+}
+
+/**
+ * Pick the best-available phone from an abandoned checkout node, trying:
+ *   1. shippingAddress.phone (most common for physical goods)
+ *   2. billingAddress.phone
+ *   3. customer.phone (profile phone; least fresh)
+ * Returns undefined if none are non-empty.
+ */
+function extractNodePhone(node: AbandonedCheckoutNode): string | undefined {
+  return pickFirstNonEmptyPhone([
+    node.shippingAddress?.phone,
+    node.billingAddress?.phone,
+    node.customer?.phone,
+  ]);
 }
 
 interface AbandonedCheckoutsResponse {
@@ -86,9 +104,12 @@ async function processAbandonedCheckoutNode(
   }
 
   if (checkout.checkoutStatus === "ACTIVE") {
-    await markCheckoutAbandoned(checkout.id, node.abandonedCheckoutUrl);
+    const nodePhone = extractNodePhone(node);
+    await markCheckoutAbandoned(checkout.id, node.abandonedCheckoutUrl, {
+      phoneIfMissing: nodePhone ?? null,
+    });
 
-    const hasContact = !!node.customer?.email || !!node.customer?.phone;
+    const hasContact = !!node.customer?.email || !!nodePhone;
     const totalAmount = parseFloat(
       node.totalPriceSet.shopMoney.amount
     );

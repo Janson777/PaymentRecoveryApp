@@ -1,6 +1,7 @@
 import type { Checkout } from "@prisma/client";
 import { CheckoutStatus } from "@prisma/client";
 import { prisma } from "~/lib/db.server";
+import { normalizePhoneValue } from "~/lib/phone.server";
 
 export async function upsertCheckout(params: {
   shopId: number;
@@ -61,8 +62,21 @@ export async function upsertCheckout(params: {
 
 export async function markCheckoutAbandoned(
   checkoutId: number,
-  recoveryUrl: string
+  recoveryUrl: string,
+  options?: { phoneIfMissing?: string | null }
 ): Promise<Checkout> {
+  // Backfill phone only if we have a candidate AND the stored value is empty.
+  // We use a conditional update on the where clause so we never overwrite a
+  // phone that was previously captured from a more authoritative source.
+  const phoneCandidate = normalizePhoneValue(options?.phoneIfMissing);
+
+  if (phoneCandidate) {
+    await prisma.checkout.updateMany({
+      where: { id: checkoutId, phone: null },
+      data: { phone: phoneCandidate },
+    });
+  }
+
   return prisma.checkout.update({
     where: { id: checkoutId },
     data: {
