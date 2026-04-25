@@ -13,11 +13,13 @@ const {
   mockWebhookFindUnique,
   mockPaymentSignalFindFirst,
   mockRecoveryMessageFindUnique,
+  mockRecoveryCaseCount,
   mockQueueAdd,
 } = vi.hoisted(() => ({
   mockWebhookFindUnique: vi.fn(),
   mockPaymentSignalFindFirst: vi.fn(),
   mockRecoveryMessageFindUnique: vi.fn(),
+  mockRecoveryCaseCount: vi.fn(),
   mockQueueAdd: vi.fn(),
 }));
 
@@ -26,6 +28,11 @@ vi.mock("~/lib/db.server", () => ({
     webhookEvent: { findUnique: mockWebhookFindUnique },
     paymentSignal: { findFirst: mockPaymentSignalFindFirst },
     recoveryMessage: { findUnique: mockRecoveryMessageFindUnique },
+    // `canCreateCase` in `~/lib/plan.server` calls `prisma.recoveryCase.count`
+    // to enforce the FREE-tier monthly cap. The integration tests don't
+    // exercise the cap, so we default to 0 used and let individual tests
+    // override if they want to test the cap boundary explicitly.
+    recoveryCase: { count: mockRecoveryCaseCount },
   },
 }));
 
@@ -72,101 +79,24 @@ import {
 import {
   createRecoveryMessage,
   markMessageSent,
+  markSmsMessageSentWithMetering,
   cancelPendingMessages,
 } from "~/models/recovery-message.server";
 import { findShopById } from "~/models/shop.server";
+import { FREE_CASES_LIMIT } from "~/lib/plan.server";
 import { isPhoneOptedOut } from "~/models/sms-opt-out.server";
 import { sendRecoveryEmail } from "~/services/email.server";
 import { sendRecoverySMS } from "~/services/sms.server";
 import { upsertCheckout } from "~/models/checkout.server";
 import { upsertOrder, markOrderPaid } from "~/models/order.server";
-
-// --- Factories ---
-
-const SMS_SHOP_SETTINGS = {
-  smsEnabled: true,
-  channelSequence: ["SMS", "EMAIL", "EMAIL"],
-};
-
-function buildWebhookEvent(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 1,
-    shopId: 1,
-    topic: "order_transactions/create",
-    eventId: "evt-123",
-    payloadJson: {
-      id: "txn-456",
-      status: "failure",
-      kind: "sale",
-      error_code: "insufficient_funds",
-      gateway: "stripe",
-      amount: "99.99",
-      currency: "USD",
-      order_id: "123",
-      processed_at: "2026-01-01T00:00:00Z",
-    },
-    ...overrides,
-  };
-}
-
-function buildShop(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 1,
-    shopDomain: "test-shop.myshopify.com",
-    settingsJson: SMS_SHOP_SETTINGS,
-    ...overrides,
-  };
-}
-
-function buildCheckout(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 100,
-    shopId: 1,
-    email: "customer@example.com",
-    phone: "+15551234567",
-    recoveryUrl: "https://shop.example.com/checkout/recover/abc123",
-    ...overrides,
-  };
-}
-
-function buildRecoveryCase(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 10,
-    shopId: 1,
-    caseType: CaseType.CONFIRMED_DECLINE,
-    caseStatus: CaseStatus.CANDIDATE,
-    confidenceScore: 80,
-    openedAt: new Date("2026-01-01"),
-    suppressionUntil: new Date("2026-01-01"),
-    ...overrides,
-  };
-}
-
-function buildRecoveryMessage(
-  overrides: Record<string, unknown> = {},
-  checkoutOverrides: Record<string, unknown> = {},
-  shopOverrides: Record<string, unknown> = {},
-  caseOverrides: Record<string, unknown> = {}
-) {
-  const shop = buildShop(shopOverrides);
-  const checkout = buildCheckout(checkoutOverrides);
-  const recoveryCase = buildRecoveryCase({
-    caseStatus: CaseStatus.MESSAGING,
-    checkout,
-    shop,
-    ...caseOverrides,
-  });
-
-  return {
-    id: 1,
-    channel: Channel.SMS,
-    sequenceStep: 1,
-    sentAt: null,
-    deliveryStatus: "pending",
-    recoveryCase,
-    ...overrides,
-  };
-}
+import { applyIntegrationMockDefaults } from "~/test/integration-mock-defaults";
+import {
+  buildWebhookEvent,
+  buildShop,
+  buildCheckout,
+  buildRecoveryCase,
+  buildRecoveryMessage,
+} from "~/test/fixtures";
 
 // --- Tests ---
 
@@ -175,21 +105,16 @@ describe("SMS Recovery Flow - Integration Tests", () => {
     vi.resetAllMocks();
     process.env.APP_URL = "https://app.example.com";
 
-    // Defaults for model mocks that return void
-    vi.mocked(markEventProcessed).mockResolvedValue(undefined as never);
-    vi.mocked(transitionCaseStatus).mockResolvedValue(undefined as never);
-    vi.mocked(markMessageSent).mockResolvedValue(undefined as never);
-    vi.mocked(cancelPendingMessages).mockResolvedValue(undefined as never);
-    vi.mocked(createPaymentSignal).mockResolvedValue(undefined as never);
-    vi.mocked(isPhoneOptedOut).mockResolvedValue(false);
-    vi.mocked(sendRecoverySMS).mockResolvedValue("SM-integration-001");
-    vi.mocked(sendRecoveryEmail).mockResolvedValue("email-integration-001");
-    vi.mocked(findOpenCaseForCheckout).mockResolvedValue(null);
-    vi.mocked(getExpiredCandidates).mockResolvedValue([]);
-    vi.mocked(upsertCheckout).mockResolvedValue(undefined as never);
-    vi.mocked(upsertOrder).mockResolvedValue(undefined as never);
-    vi.mocked(markOrderPaid).mockResolvedValue(undefined as never);
-    mockQueueAdd.mockResolvedValue(undefined);
+    // All shared model/service mock defaults + hoisted Prisma-mock
+    // baselines are applied by this helper. Individual tests override
+    // specific mocks as needed.
+    applyIntegrationMockDefaults({
+      shop: buildShop(),
+      prismaMocks: {
+        recoveryCaseCount: mockRecoveryCaseCount,
+        queueAdd: mockQueueAdd,
+      },
+    });
   });
 
   describe("end-to-end: transaction failure → decline → promote → SMS sent", () => {
@@ -239,10 +164,11 @@ describe("SMS Recovery Flow - Integration Tests", () => {
       );
 
       // --- Phase 3: Case promotion + message scheduling ---
+      // (findShopById default from beforeEach returns a PRO shop with the
+      // SMS-first settings this phase expects — no per-test override needed.)
       vi.mocked(getCasesReadyForMessaging).mockResolvedValue(
         [recoveryCase] as never
       );
-      vi.mocked(findShopById).mockResolvedValue(buildShop() as never);
 
       let messageIdCounter = 0;
       vi.mocked(createRecoveryMessage).mockImplementation(() =>
@@ -294,10 +220,15 @@ describe("SMS Recovery Flow - Integration Tests", () => {
         })
       );
       expect(vi.mocked(sendRecoveryEmail)).not.toHaveBeenCalled();
-      expect(vi.mocked(markMessageSent)).toHaveBeenCalledWith(
-        1,
-        "SM-integration-001"
+      expect(vi.mocked(markSmsMessageSentWithMetering)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messageId: 1,
+          providerMessageId: "SM-integration-001",
+          countryCode: "US",
+          consentSource: "checkout_phone_field",
+        })
       );
+      expect(vi.mocked(markMessageSent)).not.toHaveBeenCalled();
     });
   });
 
@@ -323,7 +254,7 @@ describe("SMS Recovery Flow - Integration Tests", () => {
 
     it("drops message when opted out and no email available", async () => {
       mockRecoveryMessageFindUnique.mockResolvedValue(
-        buildRecoveryMessage({}, { email: null })
+        buildRecoveryMessage({ checkout: { email: null } })
       );
       vi.mocked(isPhoneOptedOut).mockResolvedValue(true);
 
@@ -338,7 +269,7 @@ describe("SMS Recovery Flow - Integration Tests", () => {
   describe("missing phone → email fallback", () => {
     it("falls back to email when SMS channel has no phone number", async () => {
       mockRecoveryMessageFindUnique.mockResolvedValue(
-        buildRecoveryMessage({}, { phone: null })
+        buildRecoveryMessage({ checkout: { phone: null } })
       );
 
       await processRecoveryMessage({ recoveryMessageId: 1, recoveryCaseId: 10 });
@@ -356,7 +287,7 @@ describe("SMS Recovery Flow - Integration Tests", () => {
 
     it("drops message when both phone and email are missing", async () => {
       mockRecoveryMessageFindUnique.mockResolvedValue(
-        buildRecoveryMessage({}, { phone: null, email: null })
+        buildRecoveryMessage({ checkout: { phone: null, email: null } })
       );
 
       await processRecoveryMessage({ recoveryMessageId: 1, recoveryCaseId: 10 });
@@ -482,12 +413,9 @@ describe("SMS Recovery Flow - Integration Tests", () => {
 
     it("does not send messages for suppressed cases", async () => {
       mockRecoveryMessageFindUnique.mockResolvedValue(
-        buildRecoveryMessage(
-          {},
-          {},
-          {},
-          { caseStatus: CaseStatus.SUPPRESSED }
-        )
+        buildRecoveryMessage({
+          recoveryCase: { caseStatus: CaseStatus.SUPPRESSED },
+        })
       );
 
       await processRecoveryMessage({ recoveryMessageId: 1, recoveryCaseId: 10 });
@@ -542,7 +470,7 @@ describe("SMS Recovery Flow - Integration Tests", () => {
       };
 
       mockRecoveryMessageFindUnique.mockResolvedValue(
-        buildRecoveryMessage({}, {}, { settingsJson: customTemplate })
+        buildRecoveryMessage({ shop: { settingsJson: customTemplate } })
       );
 
       await processRecoveryMessage({ recoveryMessageId: 1, recoveryCaseId: 10 });
@@ -612,16 +540,14 @@ describe("SMS Recovery Flow - Integration Tests", () => {
 
       // --- Phase 3: Email delivery ---
       mockRecoveryMessageFindUnique.mockResolvedValue(
-        buildRecoveryMessage(
-          { id: 1, channel: Channel.EMAIL, sequenceStep: 1 },
-          {},
-          {},
-          {
+        buildRecoveryMessage({
+          message: { id: 1, channel: Channel.EMAIL, sequenceStep: 1 },
+          recoveryCase: {
             id: 20,
             caseType: CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT,
             caseStatus: CaseStatus.MESSAGING,
-          }
-        )
+          },
+        })
       );
 
       await processRecoveryMessage({ recoveryMessageId: 1, recoveryCaseId: 20 });
@@ -649,16 +575,15 @@ describe("SMS Recovery Flow - Integration Tests", () => {
       };
 
       mockRecoveryMessageFindUnique.mockResolvedValue(
-        buildRecoveryMessage(
-          { id: 1, channel: Channel.SMS, sequenceStep: 1 },
-          {},
-          { settingsJson: smsSettings },
-          {
+        buildRecoveryMessage({
+          message: { id: 1, channel: Channel.SMS, sequenceStep: 1 },
+          shop: { settingsJson: smsSettings },
+          recoveryCase: {
             id: 20,
             caseType: CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT,
             caseStatus: CaseStatus.MESSAGING,
-          }
-        )
+          },
+        })
       );
 
       await processRecoveryMessage({ recoveryMessageId: 1, recoveryCaseId: 20 });
@@ -749,12 +674,10 @@ describe("SMS Recovery Flow - Integration Tests", () => {
     it("sends SMS for step 1 and email for step 2 of the same case", async () => {
       // --- Step 1: SMS ---
       mockRecoveryMessageFindUnique.mockResolvedValue(
-        buildRecoveryMessage(
-          { id: 1, channel: Channel.SMS, sequenceStep: 1 },
-          {},
-          {},
-          { caseStatus: CaseStatus.MESSAGING }
-        )
+        buildRecoveryMessage({
+          message: { id: 1, channel: Channel.SMS, sequenceStep: 1 },
+          recoveryCase: { caseStatus: CaseStatus.MESSAGING },
+        })
       );
 
       await processRecoveryMessage({ recoveryMessageId: 1, recoveryCaseId: 10 });
@@ -764,21 +687,27 @@ describe("SMS Recovery Flow - Integration Tests", () => {
         expect.objectContaining({ to: "+15551234567" })
       );
       expect(vi.mocked(sendRecoveryEmail)).not.toHaveBeenCalled();
-      expect(vi.mocked(markMessageSent)).toHaveBeenCalledWith(1, "SM-integration-001");
+      expect(vi.mocked(markSmsMessageSentWithMetering)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messageId: 1,
+          providerMessageId: "SM-integration-001",
+          countryCode: "US",
+          consentSource: "checkout_phone_field",
+        })
+      );
 
       // Reset for step 2
       vi.mocked(sendRecoverySMS).mockClear();
       vi.mocked(sendRecoveryEmail).mockClear();
       vi.mocked(markMessageSent).mockClear();
+      vi.mocked(markSmsMessageSentWithMetering).mockClear();
 
       // --- Step 2: EMAIL ---
       mockRecoveryMessageFindUnique.mockResolvedValue(
-        buildRecoveryMessage(
-          { id: 2, channel: Channel.EMAIL, sequenceStep: 2 },
-          {},
-          {},
-          { caseStatus: CaseStatus.MESSAGING }
-        )
+        buildRecoveryMessage({
+          message: { id: 2, channel: Channel.EMAIL, sequenceStep: 2 },
+          recoveryCase: { caseStatus: CaseStatus.MESSAGING },
+        })
       );
 
       await processRecoveryMessage({ recoveryMessageId: 2, recoveryCaseId: 10 });
@@ -809,12 +738,10 @@ describe("SMS Recovery Flow - Integration Tests", () => {
 
       // Step 2 message arrives after recovery
       mockRecoveryMessageFindUnique.mockResolvedValue(
-        buildRecoveryMessage(
-          { id: 2, channel: Channel.EMAIL, sequenceStep: 2 },
-          {},
-          {},
-          { caseStatus: CaseStatus.RECOVERED }
-        )
+        buildRecoveryMessage({
+          message: { id: 2, channel: Channel.EMAIL, sequenceStep: 2 },
+          recoveryCase: { caseStatus: CaseStatus.RECOVERED },
+        })
       );
 
       await processRecoveryMessage({ recoveryMessageId: 2, recoveryCaseId: 10 });
@@ -952,6 +879,103 @@ describe("SMS Recovery Flow - Integration Tests", () => {
     });
   });
 
+  // ────────────────────────────────────────────────────────────────────────
+  // Regression guard for the plan-tier gates.
+  //
+  // The `buildShop()` factory defaults to `planTier: "PRO"` + the
+  // `mockRecoveryCaseCount` default of 0, so the bulk of the tests above
+  // exercise the flow logic without hitting any gate. This block inverts
+  // both defaults to lock in the actual gating behavior, so a regression
+  // that drops `findShopById` / `canCreateCase` / `isChannelAllowed` /
+  // `getMaxSequenceSteps` from the production code paths gets caught
+  // here — not silently hidden by the PRO default.
+  // ────────────────────────────────────────────────────────────────────────
+  describe("plan-tier gating (regression guards)", () => {
+    it("evaluateTransactionFailure skips createRecoveryCase when FREE-tier shop has hit the monthly cap", async () => {
+      vi.mocked(findShopById).mockResolvedValue(
+        buildShop({ planTier: "FREE" }) as never
+      );
+      mockRecoveryCaseCount.mockResolvedValue(FREE_CASES_LIMIT);
+      vi.mocked(findOpenCaseForOrder).mockResolvedValue(null);
+      mockPaymentSignalFindFirst.mockResolvedValue(null);
+
+      await evaluateTransactionFailure({
+        shopId: 1,
+        shopifyOrderGid: "gid://shopify/Order/999",
+        errorCode: "insufficient_funds",
+        gateway: "stripe",
+      });
+
+      expect(mockRecoveryCaseCount).toHaveBeenCalled();
+      expect(vi.mocked(createRecoveryCase)).not.toHaveBeenCalled();
+    });
+
+    it("evaluateAbandonedCheckout skips createRecoveryCase when FREE-tier shop has hit the monthly cap", async () => {
+      // Sibling coverage for the second decline-detection entry point. Both
+      // `evaluateTransactionFailure` and `evaluateAbandonedCheckout` share the
+      // same `findShopById → getShopPlanTier → canCreateCase` gate pattern;
+      // a regression that drops the gate from only one of the two paths
+      // would slip past a single-path guard.
+      vi.mocked(findShopById).mockResolvedValue(
+        buildShop({ planTier: "FREE" }) as never
+      );
+      mockRecoveryCaseCount.mockResolvedValue(FREE_CASES_LIMIT);
+      vi.mocked(findOpenCaseForCheckout).mockResolvedValue(null);
+
+      await evaluateAbandonedCheckout({
+        shopId: 1,
+        checkoutId: 201,
+        hasContactInfo: true,
+        hasShippingInfo: true,
+        totalAmount: 59.99,
+      });
+
+      expect(mockRecoveryCaseCount).toHaveBeenCalled();
+      expect(vi.mocked(createRecoveryCase)).not.toHaveBeenCalled();
+    });
+
+    it("promoteReadyCases truncates to 2 steps and forces SMS → EMAIL for FREE-tier shops", async () => {
+      const recoveryCase = buildRecoveryCase({ id: 77, shopId: 1 });
+      vi.mocked(getCasesReadyForMessaging).mockResolvedValue(
+        [recoveryCase] as never
+      );
+      vi.mocked(findShopById).mockResolvedValue(
+        buildShop({
+          planTier: "FREE",
+          settingsJson: {
+            smsEnabled: true,
+            channelSequence: ["SMS", "SMS", "SMS"],
+            retryDelays: [15, 720, 2160],
+          },
+        }) as never
+      );
+
+      let messageIdCounter = 0;
+      vi.mocked(createRecoveryMessage).mockImplementation(() =>
+        Promise.resolve({ id: ++messageIdCounter } as never)
+      );
+
+      await promoteReadyCases();
+
+      const calls = vi.mocked(createRecoveryMessage).mock.calls;
+      // FREE-tier `maxSequenceSteps` is 2, so the third retryDelay is
+      // dropped even though the settings supplied three.
+      expect(calls).toHaveLength(2);
+      // Every created message is EMAIL despite channelSequence being all
+      // SMS, because `isChannelAllowed(FREE, SMS)` is false.
+      for (const call of calls) {
+        expect(call[0]).toEqual(
+          expect.objectContaining({
+            recoveryCaseId: 77,
+            channel: Channel.EMAIL,
+          })
+        );
+      }
+      // Only 2 queue jobs scheduled (matching the truncated sequence).
+      expect(mockQueueAdd).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe("multi-shop batch: different SMS configs processed together", () => {
     it("handles mixed SMS/email shops in a single promotion batch", async () => {
       const smsShopCase = buildRecoveryCase({ id: 40, shopId: 1 });
@@ -1053,10 +1077,9 @@ describe("SMS Recovery Flow - Integration Tests", () => {
     it("sends correct templates when delivering messages from different shops", async () => {
       // Shop 1 message: CONFIRMED_DECLINE via SMS
       mockRecoveryMessageFindUnique.mockResolvedValue(
-        buildRecoveryMessage(
-          { id: 1, channel: Channel.SMS, sequenceStep: 1 },
-          {},
-          {
+        buildRecoveryMessage({
+          message: { id: 1, channel: Channel.SMS, sequenceStep: 1 },
+          shop: {
             id: 1,
             settingsJson: {
               smsEnabled: true,
@@ -1066,8 +1089,12 @@ describe("SMS Recovery Flow - Integration Tests", () => {
               },
             },
           },
-          { id: 40, caseType: CaseType.CONFIRMED_DECLINE, caseStatus: CaseStatus.MESSAGING }
-        )
+          recoveryCase: {
+            id: 40,
+            caseType: CaseType.CONFIRMED_DECLINE,
+            caseStatus: CaseStatus.MESSAGING,
+          },
+        })
       );
 
       await processRecoveryMessage({ recoveryMessageId: 1, recoveryCaseId: 40 });
@@ -1083,16 +1110,15 @@ describe("SMS Recovery Flow - Integration Tests", () => {
 
       // Shop 2 message: LIKELY_PAYMENT_STAGE_ABANDONMENT via EMAIL
       mockRecoveryMessageFindUnique.mockResolvedValue(
-        buildRecoveryMessage(
-          { id: 2, channel: Channel.EMAIL, sequenceStep: 1 },
-          {},
-          { id: 2, settingsJson: { smsEnabled: false } },
-          {
+        buildRecoveryMessage({
+          message: { id: 2, channel: Channel.EMAIL, sequenceStep: 1 },
+          shop: { id: 2, settingsJson: { smsEnabled: false } },
+          recoveryCase: {
             id: 41,
             caseType: CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT,
             caseStatus: CaseStatus.MESSAGING,
-          }
-        )
+          },
+        })
       );
 
       await processRecoveryMessage({ recoveryMessageId: 2, recoveryCaseId: 41 });
