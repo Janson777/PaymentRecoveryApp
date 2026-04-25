@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Shop } from "@prisma/client";
+import { buildShop } from "~/test/fixtures";
 
 const mockShopifyGraphQL = vi.fn();
 const mockFindCheckoutByShopifyId = vi.fn();
@@ -52,16 +52,14 @@ import {
   scheduleReconciliationJobs,
 } from "./reconciliation.server";
 
-const mockShop: Shop = {
+// Only `isActive` is actually read by production code in these tests; other
+// Shop fields are runtime-unused (routed through vi.fn() mocks).
+const mockShop = buildShop({
   id: 10,
   shopDomain: "test-store.myshopify.com",
-  accessTokenEncrypted: "encrypted",
-  isActive: true,
-  apiVersion: "2024-10",
   settingsJson: null,
-  installedAt: new Date(),
-  uninstalledAt: null,
-} as Shop;
+  isActive: true,
+});
 
 function buildAbandonedCheckoutNode(overrides: Record<string, unknown> = {}) {
   return {

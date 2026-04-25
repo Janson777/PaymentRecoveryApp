@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Shop } from "@prisma/client";
+import { buildShop } from "~/test/fixtures";
 
 const mockShopifyGraphQL = vi.fn();
 const mockUpdateShopPlan = vi.fn();
@@ -27,12 +28,14 @@ import {
   PRO_PLAN,
 } from "./billing.server";
 
-const mockShop = {
+// Cast needed here (unlike reconciliation.server.test.ts): createProSubscription
+// has a real typed `Shop` signature, not a vi.fn() mock.
+const mockShop = buildShop({
   id: 10,
   shopDomain: "test.myshopify.com",
   accessTokenEncrypted: "encrypted",
   planTier: "FREE",
-} as Shop;
+}) as Shop;
 
 describe("billing.server", () => {
   beforeEach(() => {
