@@ -6,6 +6,7 @@ const mockSendRecoveryEmail = vi.fn();
 const mockSendRecoverySMS = vi.fn();
 const mockGetEmailCopy = vi.fn();
 const mockMarkMessageSent = vi.fn();
+const mockMarkSmsMessageSentWithMetering = vi.fn();
 const mockIsPhoneOptedOut = vi.fn();
 const mockParseShopSettings = vi.fn();
 
@@ -31,6 +32,8 @@ vi.mock("./recovery-workflow.server", () => ({
 
 vi.mock("~/models/recovery-message.server", () => ({
   markMessageSent: (...args: unknown[]) => mockMarkMessageSent(...args),
+  markSmsMessageSentWithMetering: (...args: unknown[]) =>
+    mockMarkSmsMessageSentWithMetering(...args),
 }));
 
 vi.mock("~/models/sms-opt-out.server", () => ({
@@ -42,44 +45,7 @@ vi.mock("~/lib/settings", () => ({
 }));
 
 import { processRecoveryMessage } from "./recovery-send.server";
-
-function buildMessage(overrides: Record<string, unknown> = {}) {
-  const checkout = {
-    id: 100,
-    email: "customer@example.com",
-    phone: "+15551234567",
-    recoveryUrl: "https://shop.example.com/checkout/recover/abc123",
-    ...((overrides.checkout as Record<string, unknown>) ?? {}),
-  };
-
-  const shop = {
-    id: 1,
-    settingsJson: {},
-    ...((overrides.shop as Record<string, unknown>) ?? {}),
-  };
-
-  const recoveryCase = {
-    id: 10,
-    shopId: 1,
-    caseStatus: CaseStatus.READY,
-    caseType: CaseType.CONFIRMED_DECLINE,
-    checkout,
-    shop,
-    ...((overrides.recoveryCase as Record<string, unknown>) ?? {}),
-  };
-
-  return {
-    id: 1,
-    channel: Channel.EMAIL,
-    sequenceStep: 1,
-    sentAt: null,
-    deliveryStatus: "pending",
-    recoveryCase,
-    ...overrides,
-    // Ensure nested overrides don't clobber the full object
-    ...(overrides.recoveryCase ? { recoveryCase } : {}),
-  };
-}
+import { buildRecoveryMessage } from "~/test/fixtures";
 
 const DEFAULT_SMS_SETTINGS = {
   smsTemplates: {
@@ -101,8 +67,14 @@ describe("processRecoveryMessage", () => {
       body: "Test body",
     });
     mockSendRecoveryEmail.mockResolvedValue("email-msg-id-123");
-    mockSendRecoverySMS.mockResolvedValue("SM123456");
+    mockSendRecoverySMS.mockResolvedValue({
+      sid: "SM123456",
+      numSegments: null,
+      priceUsdCents: null,
+      countryCode: "US",
+    });
     mockMarkMessageSent.mockResolvedValue(undefined);
+    mockMarkSmsMessageSentWithMetering.mockResolvedValue(undefined);
     mockIsPhoneOptedOut.mockResolvedValue(false);
     mockParseShopSettings.mockReturnValue(DEFAULT_SMS_SETTINGS);
   });
@@ -123,7 +95,7 @@ describe("processRecoveryMessage", () => {
 
     it("returns early when message was already sent", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({ sentAt: new Date() })
+        buildRecoveryMessage({ message: { sentAt: new Date() } })
       );
 
       await processRecoveryMessage({
@@ -138,7 +110,7 @@ describe("processRecoveryMessage", () => {
 
     it("returns early when message is cancelled", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({ deliveryStatus: "cancelled" })
+        buildRecoveryMessage({ message: { deliveryStatus: "cancelled" } })
       );
 
       await processRecoveryMessage({
@@ -160,7 +132,7 @@ describe("processRecoveryMessage", () => {
         CaseStatus.CANCELLED,
       ]) {
         mockFindUnique.mockResolvedValue(
-          buildMessage({
+          buildRecoveryMessage({
             recoveryCase: { caseStatus: status },
           })
         );
@@ -178,7 +150,7 @@ describe("processRecoveryMessage", () => {
 
     it("returns early when checkout has no recovery URL", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({ checkout: { recoveryUrl: null } })
+        buildRecoveryMessage({ checkout: { recoveryUrl: null } })
       );
 
       await processRecoveryMessage({
@@ -195,7 +167,7 @@ describe("processRecoveryMessage", () => {
   describe("email channel", () => {
     it("sends email for EMAIL channel messages", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({ channel: Channel.EMAIL })
+        buildRecoveryMessage({ message: { channel: Channel.EMAIL } })
       );
 
       await processRecoveryMessage({
@@ -219,9 +191,8 @@ describe("processRecoveryMessage", () => {
 
     it("uses correct email copy for LIKELY_PAYMENT_STAGE_ABANDONMENT case type", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({
-          channel: Channel.EMAIL,
-          sequenceStep: 2,
+        buildRecoveryMessage({
+          message: { channel: Channel.EMAIL, sequenceStep: 2 },
           recoveryCase: { caseType: CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT },
         })
       );
@@ -239,8 +210,8 @@ describe("processRecoveryMessage", () => {
 
     it("returns early when EMAIL channel has no email address", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({
-          channel: Channel.EMAIL,
+        buildRecoveryMessage({
+          message: { channel: Channel.EMAIL },
           checkout: { email: null },
         })
       );
@@ -256,8 +227,8 @@ describe("processRecoveryMessage", () => {
 
     it("works with MESSAGING case status", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({
-          channel: Channel.EMAIL,
+        buildRecoveryMessage({
+          message: { channel: Channel.EMAIL },
           recoveryCase: { caseStatus: CaseStatus.MESSAGING },
         })
       );
@@ -275,7 +246,7 @@ describe("processRecoveryMessage", () => {
   describe("SMS channel", () => {
     it("sends SMS when phone is available and not opted out", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({ channel: Channel.SMS })
+        buildRecoveryMessage({ message: { channel: Channel.SMS } })
       );
       mockIsPhoneOptedOut.mockResolvedValue(false);
 
@@ -291,13 +262,51 @@ describe("processRecoveryMessage", () => {
         body: "Payment failed! Complete your order: https://app.example.com/r/10",
       });
       expect(mockSendRecoveryEmail).not.toHaveBeenCalled();
-      expect(mockMarkMessageSent).toHaveBeenCalledWith(1, "SM123456");
+      // SMS success path routes through the metering helper, NOT plain
+      // markMessageSent — so consentSource + countryCode + segment fields
+      // land on the RecoveryMessage row.
+      expect(mockMarkMessageSent).not.toHaveBeenCalled();
+      expect(mockMarkSmsMessageSentWithMetering).toHaveBeenCalledWith({
+        messageId: 1,
+        providerMessageId: "SM123456",
+        numSegments: null,
+        priceUsdCents: null,
+        countryCode: "US",
+        consentSource: "checkout_phone_field",
+      });
+    });
+
+    it("forwards Twilio-populated metering fields verbatim to the helper", async () => {
+      mockFindUnique.mockResolvedValue(
+        buildRecoveryMessage({ message: { id: 99, channel: Channel.SMS } })
+      );
+      mockIsPhoneOptedOut.mockResolvedValue(false);
+      mockSendRecoverySMS.mockResolvedValue({
+        sid: "SM-full",
+        numSegments: 2,
+        priceUsdCents: 2,
+        countryCode: "CA",
+      });
+
+      await processRecoveryMessage({
+        recoveryMessageId: 99,
+        recoveryCaseId: 10,
+      });
+
+      expect(mockMarkSmsMessageSentWithMetering).toHaveBeenCalledWith({
+        messageId: 99,
+        providerMessageId: "SM-full",
+        numSegments: 2,
+        priceUsdCents: 2,
+        countryCode: "CA",
+        consentSource: "checkout_phone_field",
+      });
     });
 
     it("uses correct SMS template for LIKELY_PAYMENT_STAGE_ABANDONMENT", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({
-          channel: Channel.SMS,
+        buildRecoveryMessage({
+          message: { channel: Channel.SMS },
           recoveryCase: { caseType: CaseType.LIKELY_PAYMENT_STAGE_ABANDONMENT },
         })
       );
@@ -316,7 +325,7 @@ describe("processRecoveryMessage", () => {
 
     it("substitutes {{recovery_url}} in merchant SMS template", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({ channel: Channel.SMS })
+        buildRecoveryMessage({ message: { channel: Channel.SMS } })
       );
       mockIsPhoneOptedOut.mockResolvedValue(false);
       mockParseShopSettings.mockReturnValue({
@@ -343,7 +352,7 @@ describe("processRecoveryMessage", () => {
   describe("SMS opt-out fallback to email", () => {
     it("falls back to email when phone is opted out", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({ channel: Channel.SMS })
+        buildRecoveryMessage({ message: { channel: Channel.SMS } })
       );
       mockIsPhoneOptedOut.mockResolvedValue(true);
 
@@ -369,8 +378,8 @@ describe("processRecoveryMessage", () => {
 
     it("returns early when opted out and no email available", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({
-          channel: Channel.SMS,
+        buildRecoveryMessage({
+          message: { channel: Channel.SMS },
           checkout: { email: null },
         })
       );
@@ -390,8 +399,8 @@ describe("processRecoveryMessage", () => {
   describe("SMS missing phone fallback to email", () => {
     it("falls back to email when phone number is missing", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({
-          channel: Channel.SMS,
+        buildRecoveryMessage({
+          message: { channel: Channel.SMS },
           checkout: { phone: null },
         })
       );
@@ -411,8 +420,8 @@ describe("processRecoveryMessage", () => {
 
     it("returns early when phone is missing and email is also missing", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({
-          channel: Channel.SMS,
+        buildRecoveryMessage({
+          message: { channel: Channel.SMS },
           checkout: { phone: null, email: null },
         })
       );
@@ -432,7 +441,7 @@ describe("processRecoveryMessage", () => {
     it("builds tracking URL from APP_URL env var", async () => {
       process.env.APP_URL = "https://custom-domain.com";
       mockFindUnique.mockResolvedValue(
-        buildMessage({ channel: Channel.EMAIL })
+        buildRecoveryMessage({ message: { channel: Channel.EMAIL } })
       );
 
       await processRecoveryMessage({
@@ -450,7 +459,7 @@ describe("processRecoveryMessage", () => {
     it("falls back to localhost when APP_URL is not set", async () => {
       delete process.env.APP_URL;
       mockFindUnique.mockResolvedValue(
-        buildMessage({ channel: Channel.EMAIL })
+        buildRecoveryMessage({ message: { channel: Channel.EMAIL } })
       );
 
       await processRecoveryMessage({
@@ -468,7 +477,7 @@ describe("processRecoveryMessage", () => {
     it("uses tracking URL in SMS body", async () => {
       process.env.APP_URL = "https://custom-domain.com";
       mockFindUnique.mockResolvedValue(
-        buildMessage({ channel: Channel.SMS })
+        buildRecoveryMessage({ message: { channel: Channel.SMS } })
       );
       mockIsPhoneOptedOut.mockResolvedValue(false);
 
@@ -488,7 +497,7 @@ describe("processRecoveryMessage", () => {
   describe("markMessageSent integration", () => {
     it("calls markMessageSent with email provider ID after email send", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({ id: 42, channel: Channel.EMAIL })
+        buildRecoveryMessage({ message: { id: 42, channel: Channel.EMAIL } })
       );
       mockSendRecoveryEmail.mockResolvedValue("postmark-id-abc");
 
@@ -500,24 +509,37 @@ describe("processRecoveryMessage", () => {
       expect(mockMarkMessageSent).toHaveBeenCalledWith(42, "postmark-id-abc");
     });
 
-    it("calls markMessageSent with SMS provider ID after SMS send", async () => {
+    it("calls markSmsMessageSentWithMetering after a successful SMS send", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({ id: 77, channel: Channel.SMS })
+        buildRecoveryMessage({ message: { id: 77, channel: Channel.SMS } })
       );
       mockIsPhoneOptedOut.mockResolvedValue(false);
-      mockSendRecoverySMS.mockResolvedValue("SMxyz789");
+      mockSendRecoverySMS.mockResolvedValue({
+        sid: "SMxyz789",
+        numSegments: 1,
+        priceUsdCents: 1,
+        countryCode: "US",
+      });
 
       await processRecoveryMessage({
         recoveryMessageId: 77,
         recoveryCaseId: 10,
       });
 
-      expect(mockMarkMessageSent).toHaveBeenCalledWith(77, "SMxyz789");
+      expect(mockMarkSmsMessageSentWithMetering).toHaveBeenCalledWith({
+        messageId: 77,
+        providerMessageId: "SMxyz789",
+        numSegments: 1,
+        priceUsdCents: 1,
+        countryCode: "US",
+        consentSource: "checkout_phone_field",
+      });
+      expect(mockMarkMessageSent).not.toHaveBeenCalled();
     });
 
     it("calls markMessageSent with email ID after opt-out fallback", async () => {
       mockFindUnique.mockResolvedValue(
-        buildMessage({ id: 55, channel: Channel.SMS })
+        buildRecoveryMessage({ message: { id: 55, channel: Channel.SMS } })
       );
       mockIsPhoneOptedOut.mockResolvedValue(true);
       mockSendRecoveryEmail.mockResolvedValue("fallback-email-id");
