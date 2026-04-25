@@ -26,9 +26,9 @@ describe("Index component", () => {
     mocks.useNavigation.mockReturnValue({ state: "idle" });
   });
 
-  it("renders the Payment Recovery heading", () => {
+  it("renders the BitPushy logo", () => {
     render(<Index />);
-    expect(screen.getByText("Payment Recovery")).toBeInTheDocument();
+    expect(screen.getByLabelText("BitPushy")).toBeInTheDocument();
   });
 
   it("renders the tagline", () => {
