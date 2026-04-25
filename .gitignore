@@ -62,3 +62,10 @@ coverage/
 
 # Windows reserved device name
 nul
+
+# ==============================================================================
+# Nested repositories
+# ==============================================================================
+# The marketing/landing website lives in its own git repo (see website/.git).
+# Ignored here so the parent repo doesn't try to track its files.
+website/
