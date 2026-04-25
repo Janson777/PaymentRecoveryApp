@@ -169,7 +169,7 @@ export function SettingsForm({
                 </span>
               </label>
               <p className="-mt-3 pl-7 text-xs text-gray-400">
-                Requires Twilio credentials configured in your environment.
+                SMS is included with Pro &mdash; 500 segments per cycle, then $0.04 per additional segment billed through Shopify.
               </p>
               {smsEnabled && (
                 <PhoneCollectionBanner shopDomain={shopDomain} />

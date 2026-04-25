@@ -393,19 +393,31 @@ describe("DashboardSettings component", () => {
     expect(proBadges.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("does not show Twilio credentials note on FREE plan", () => {
+  it("does not show SMS pricing note on FREE plan", () => {
     mocks.useLoaderData.mockReturnValue(defaultLoaderData);
     render(<DashboardSettings />);
-    expect(screen.queryByText(/Requires Twilio credentials/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/SMS is included with Pro/)).not.toBeInTheDocument();
   });
 
-  it("shows Twilio credentials note on PRO plan", () => {
+  it("shows SMS pricing note on PRO plan", () => {
     mocks.useLoaderData.mockReturnValue({
       ...defaultLoaderData,
       planTier: "PRO" as const,
     });
     render(<DashboardSettings />);
-    expect(screen.getByText(/Requires Twilio credentials/)).toBeInTheDocument();
+    expect(screen.getByText(/SMS is included with Pro/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/500 segments per cycle/)
+    ).toBeInTheDocument();
+  });
+
+  it("SMS pricing note does NOT mention Twilio credentials (avoids BYO-Twilio confusion)", () => {
+    mocks.useLoaderData.mockReturnValue({
+      ...defaultLoaderData,
+      planTier: "PRO" as const,
+    });
+    render(<DashboardSettings />);
+    expect(screen.queryByText(/Twilio credentials/i)).not.toBeInTheDocument();
   });
 
   describe("phone collection banner", () => {
